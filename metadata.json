@@ -1,0 +1,8 @@
+{
+  "name": "SAL - Sistema de Análise de Leitura",
+  "description": "Plataforma avançada de BI para monitoramento de impedimentos de leitura, com ferramentas de consulta técnica e analytics em tempo real, desenvolvido para excelência operacional.",
+  "requestFramePermissions": [
+    "geolocation"
+  ],
+  "majorCapabilities": []
+}
