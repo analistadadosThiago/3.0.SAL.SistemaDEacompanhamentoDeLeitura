@@ -23,7 +23,6 @@ interface LayoutProps {
   activeTab: TabType;
   onTabChange: (tab: TabType) => void;
   currentSection: string;
-  onOpenDatabaseModal: () => void;
 }
 
 interface MenuItem {
@@ -44,9 +43,8 @@ export const Layout: React.FC<LayoutProps> = ({
   activeTab, 
   onTabChange, 
   currentSection,
-  onOpenDatabaseModal
 }) => {
-  const { records } = useData();
+  const { records, loading, reloadSupabaseData } = useData();
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [time, setTime] = useState(new Date());
 
@@ -223,15 +221,16 @@ export const Layout: React.FC<LayoutProps> = ({
           {/* Database & Toggle Bar at bottom */}
           <div className="p-3 border-t border-slate-800/80 bg-[#080c14] space-y-2">
             <button
-              onClick={onOpenDatabaseModal}
-              title="Gerenciar Conexão Google Sheets"
+              onClick={() => reloadSupabaseData()}
+              disabled={loading}
+              title="Atualizar dados do Supabase"
               className={`w-full py-2 px-2.5 bg-slate-800/80 hover:bg-slate-800 text-slate-300 rounded-lg text-xs font-semibold transition-colors flex items-center cursor-pointer ${
                 isSidebarCollapsed ? 'justify-center' : 'justify-between'
               }`}
             >
               <div className="flex items-center gap-2 truncate">
-                <Database className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-                {!isSidebarCollapsed && <span className="truncate">Base de Dados</span>}
+                <Database className={`w-3.5 h-3.5 text-emerald-400 shrink-0 ${loading ? 'animate-spin' : ''}`} />
+                {!isSidebarCollapsed && <span className="truncate">Supabase</span>}
               </div>
               {!isSidebarCollapsed && (
                 <span className="text-[10px] font-mono text-emerald-400 font-bold bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-800/40">
@@ -271,11 +270,17 @@ export const Layout: React.FC<LayoutProps> = ({
             {/* Topbar Right */}
             <div className="flex items-center gap-3">
               <button
-                onClick={onOpenDatabaseModal}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-300 hover:border-blue-500/50 hover:text-white transition-all cursor-pointer shadow-sm"
+                onClick={() => reloadSupabaseData()}
+                disabled={loading}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-300 hover:border-emerald-500/50 hover:text-white transition-all cursor-pointer shadow-sm"
+                title="Recarregar dados do Supabase"
               >
-                <Database className="w-3.5 h-3.5 text-cyan-400" />
-                <span className="hidden sm:inline font-medium">Planilha GViz</span>
+                <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0 animate-pulse"></span>
+                <Database className={`w-3.5 h-3.5 text-emerald-400 ${loading ? 'animate-spin' : ''}`} />
+                <span className="hidden sm:inline font-medium">Supabase Conectado</span>
+                <span className="text-[11px] font-mono text-emerald-400 font-bold hidden md:inline">
+                  ({records.length})
+                </span>
               </button>
             </div>
           </header>

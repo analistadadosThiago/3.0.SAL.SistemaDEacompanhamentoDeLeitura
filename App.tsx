@@ -10,12 +10,11 @@ import ControleImpressao from './components/ControleImpressao';
 import ControleSimulacao from './components/ControleSimulacao';
 import ControleHorario from './components/ControleHorario';
 import SequenciaLeitura from './components/SequenciaLeitura';
-import { DatabaseModal } from './components/DatabaseModal';
+import { Loader2, AlertTriangle, RefreshCw } from 'lucide-react';
 
 const AppContent: React.FC = () => {
-  const { isConfigured } = useData();
+  const { loading, loadingCount, error, records, reloadSupabaseData } = useData();
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
-  const [isDbModalOpen, setIsDbModalOpen] = useState<boolean>(!isConfigured);
 
   const getSectionTitle = () => {
     switch (activeTab) {
@@ -32,34 +31,74 @@ const AppContent: React.FC = () => {
     }
   };
 
-  return (
-    <>
-      <Layout
-        activeTab={activeTab}
-        onTabChange={(tab) => setActiveTab(tab)}
-        currentSection={getSectionTitle()}
-        onOpenDatabaseModal={() => setIsDbModalOpen(true)}
-      >
-        <div className="animate-fade-in">
-          {activeTab === 'dashboard' && <Dashboard />}
-          {activeTab === 'consulta' && <Consulta />}
-          {activeTab === 'controle' && <ControleLeiturista />}
-          {activeTab === 'evidencias' && <ControleEvidencias />}
-          {activeTab === 'consistencia' && <ControleConsistencia />}
-          {activeTab === 'horario' && <ControleHorario />}
-          {activeTab === 'sequencia' && <SequenciaLeitura />}
-          {activeTab === 'impressao' && <ControleImpressao />}
-          {activeTab === 'simulacao' && <ControleSimulacao />}
+  // Se estiver no carregamento inicial antes de ter registros
+  if (loading && records.length === 0) {
+    return (
+      <div className="min-h-screen bg-[#080c14] flex flex-col items-center justify-center p-6 text-slate-100 font-sans">
+        <div className="bg-[#111827] border border-slate-800 rounded-3xl p-8 max-w-md w-full shadow-2xl flex flex-col items-center text-center space-y-4 animate-fade-in">
+          <div className="relative">
+            <div className="w-16 h-16 rounded-2xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-cyan-400">
+              <Loader2 className="w-8 h-8 animate-spin" />
+            </div>
+          </div>
+          <div>
+            <h2 className="text-lg font-bold text-white tracking-tight">SAL – Sistema de Análise de Leitura</h2>
+            <p className="text-xs text-slate-400 mt-1">
+              {loadingCount > 0 
+                ? `Carregando registros: ${loadingCount.toLocaleString('pt-BR')} linhas lidas...` 
+                : 'Conectando à base Supabase via paginação...'
+              }
+            </p>
+          </div>
+          <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+            <div className="bg-gradient-to-r from-blue-500 to-cyan-400 h-full w-full animate-pulse"></div>
+          </div>
         </div>
-      </Layout>
+      </div>
+    );
+  }
 
-      {/* Database Connection Modal */}
-      <DatabaseModal
-        isOpen={isDbModalOpen || !isConfigured}
-        onClose={() => setIsDbModalOpen(false)}
-        canDismiss={isConfigured}
-      />
-    </>
+  // Se houver erro de conexão inicial sem registros
+  if (error && records.length === 0) {
+    return (
+      <div className="min-h-screen bg-[#080c14] flex flex-col items-center justify-center p-6 text-slate-100 font-sans">
+        <div className="bg-[#111827] border border-red-800/80 rounded-3xl p-8 max-w-md w-full shadow-2xl flex flex-col items-center text-center space-y-4 animate-fade-in">
+          <div className="w-14 h-14 rounded-2xl bg-red-600/20 border border-red-500/30 flex items-center justify-center text-red-400">
+            <AlertTriangle className="w-7 h-7" />
+          </div>
+          <div>
+            <h2 className="text-base font-bold text-white">Falha ao Conectar com o Supabase</h2>
+            <p className="text-xs text-slate-400 mt-1.5">{error}</p>
+          </div>
+          <button
+            onClick={() => reloadSupabaseData()}
+            className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer shadow-lg shadow-blue-600/20"
+          >
+            <RefreshCw className="w-4 h-4" /> Tentar Novamente
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <Layout
+      activeTab={activeTab}
+      onTabChange={(tab) => setActiveTab(tab)}
+      currentSection={getSectionTitle()}
+    >
+      <div className="animate-fade-in">
+        {activeTab === 'dashboard' && <Dashboard />}
+        {activeTab === 'consulta' && <Consulta />}
+        {activeTab === 'controle' && <ControleLeiturista />}
+        {activeTab === 'evidencias' && <ControleEvidencias />}
+        {activeTab === 'consistencia' && <ControleConsistencia />}
+        {activeTab === 'horario' && <ControleHorario />}
+        {activeTab === 'sequencia' && <SequenciaLeitura />}
+        {activeTab === 'impressao' && <ControleImpressao />}
+        {activeTab === 'simulacao' && <ControleSimulacao />}
+      </div>
+    </Layout>
   );
 };
 

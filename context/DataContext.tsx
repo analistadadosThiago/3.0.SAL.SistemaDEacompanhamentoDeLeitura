@@ -1,17 +1,14 @@
-import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
 import { FieldRecord, MONTH_ORDER } from '../types';
-import { fetchGoogleSheetsGViz, generateSampleRecords } from '../services/googleSheetsService';
+import { fetchSupabaseBaseLeitura } from '../services/supabaseService';
 
 interface DataContextType {
   records: FieldRecord[];
   loading: boolean;
+  loadingCount: number;
   error: string | null;
-  sheetUrl: string;
   isConfigured: boolean;
-  isDemoData: boolean;
-  connectSheet: (url: string) => Promise<boolean>;
-  loadDemoData: () => void;
-  disconnectSheet: () => void;
+  reloadSupabaseData: () => Promise<void>;
   opcoesAnos: number[];
   opcoesMeses: string[];
   opcoesRazoes: string[];
@@ -20,92 +17,38 @@ interface DataContextType {
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
-const STORAGE_KEY_URL = 'sal_google_sheet_url';
-const STORAGE_KEY_IS_DEMO = 'sal_is_demo_data';
-
 export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [records, setRecords] = useState<FieldRecord[]>([]);
-  const [loading, setLoading] = useState<boolean>(false);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [loadingCount, setLoadingCount] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
-  const [sheetUrl, setSheetUrl] = useState<string>('');
   const [isConfigured, setIsConfigured] = useState<boolean>(false);
-  const [isDemoData, setIsDemoData] = useState<boolean>(false);
 
-  // Initialize from localStorage or show prompt
-  useEffect(() => {
-    const savedUrl = localStorage.getItem(STORAGE_KEY_URL);
-    const wasDemo = localStorage.getItem(STORAGE_KEY_IS_DEMO) === 'true';
-
-    if (savedUrl) {
-      setSheetUrl(savedUrl);
-      setLoading(true);
-      fetchGoogleSheetsGViz(savedUrl)
-        .then(data => {
-          setRecords(data);
-          setIsConfigured(true);
-          setIsDemoData(false);
-        })
-        .catch(err => {
-          console.warn("Erro ao carregar planilha salva, usando demonstrativo:", err);
-          // Fallback to sample data so the app doesn't break
-          const sample = generateSampleRecords();
-          setRecords(sample);
-          setIsConfigured(true);
-          setIsDemoData(true);
-          setError(`Não foi possível recarregar a planilha (${err.message}). Carregamos a base demonstrativa.`);
-        })
-        .finally(() => setLoading(false));
-    } else if (wasDemo) {
-      const sample = generateSampleRecords();
-      setRecords(sample);
-      setIsConfigured(true);
-      setIsDemoData(true);
-    }
-  }, []);
-
-  const connectSheet = async (url: string): Promise<boolean> => {
+  const loadData = useCallback(async () => {
     setLoading(true);
+    setLoadingCount(0);
     setError(null);
     try {
-      const data = await fetchGoogleSheetsGViz(url);
+      const data = await fetchSupabaseBaseLeitura((count) => {
+        setLoadingCount(count);
+      });
       setRecords(data);
-      setSheetUrl(url);
       setIsConfigured(true);
-      setIsDemoData(false);
-      localStorage.setItem(STORAGE_KEY_URL, url);
-      localStorage.removeItem(STORAGE_KEY_IS_DEMO);
-      return true;
     } catch (err: any) {
-      setError(err.message || 'Erro ao conectar à planilha Google Sheets.');
-      return false;
+      console.error('Falha ao conectar com o Supabase:', err);
+      setError(err.message || 'Erro ao carregar dados do Supabase.');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const loadDemoData = () => {
-    setLoading(true);
-    setError(null);
-    setTimeout(() => {
-      const sample = generateSampleRecords();
-      setRecords(sample);
-      setSheetUrl('https://docs.google.com/spreadsheets/d/demo-sal-leituristas-energia/edit');
-      setIsConfigured(true);
-      setIsDemoData(true);
-      localStorage.setItem(STORAGE_KEY_IS_DEMO, 'true');
-      localStorage.removeItem(STORAGE_KEY_URL);
-      setLoading(false);
-    }, 400);
-  };
+  // Carrega diretamente na inicialização do sistema
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
-  const disconnectSheet = () => {
-    setRecords([]);
-    setSheetUrl('');
-    setIsConfigured(false);
-    setIsDemoData(false);
-    setError(null);
-    localStorage.removeItem(STORAGE_KEY_URL);
-    localStorage.removeItem(STORAGE_KEY_IS_DEMO);
+  const reloadSupabaseData = async () => {
+    await loadData();
   };
 
   const opcoesAnos = useMemo(() => {
@@ -149,13 +92,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       value={{
         records,
         loading,
+        loadingCount,
         error,
-        sheetUrl,
         isConfigured,
-        isDemoData,
-        connectSheet,
-        loadDemoData,
-        disconnectSheet,
+        reloadSupabaseData,
         opcoesAnos,
         opcoesMeses,
         opcoesRazoes,

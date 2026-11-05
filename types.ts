@@ -21,6 +21,7 @@ export interface FieldRecord {
   digitacao: number;
   cna: string;
   consistencia: string;
+  ciclo?: string;
 }
 
 export const EXACT_IMPEDIMENTO_CODES: string[] = [
