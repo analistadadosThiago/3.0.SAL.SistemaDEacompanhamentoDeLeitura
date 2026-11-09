@@ -431,7 +431,7 @@ export const ControleSimulacao: React.FC = () => {
                 <option value="">Todas as Razões</option>
                 {opcoesRazoes.map((rz) => (
                   <option key={rz} value={rz}>
-                    RZ {rz}
+                    {rz}
                   </option>
                 ))}
               </select>

@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, 
-  ResponsiveContainer, Legend 
+  ResponsiveContainer, Legend, Cell, LabelList
 } from 'recharts';
 import * as XLSX from 'xlsx';
 import { exportPdfReport } from '../utils/pdfExport';
@@ -30,6 +30,9 @@ export const ControleEvidencias: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'geral' | 'matricula'>('geral');
   const [pageGeral, setPageGeral] = useState<number>(1);
   const [pageMatr, setPageMatr] = useState<number>(1);
+
+  // Modo do Gráfico: 'geral' (Por Razão) ou 'matricula' (Relação de dados por matrícula)
+  const [chartMode, setChartMode] = useState<'geral' | 'matricula'>('geral');
 
   // Controle de hover separado para as barras do gráfico (Foto OK vs Foto N-OK)
   const [hoveredBarType, setHoveredBarType] = useState<'realizadas' | 'nao_realizadas' | null>(null);
@@ -372,6 +375,23 @@ export const ControleEvidencias: React.FC = () => {
       .sort((a, b) => (b.realizadas + b.nao_realizadas) - (a.realizadas + a.nao_realizadas))
       .slice(0, 15);
   }, [filteredBase]);
+
+  // GRÁFICO: "Relação de dados por matrícula" - filtrados pela coluna INDICADOR e ordenados de forma decrescente
+  const chartDataMatricula = useMemo(() => {
+    return relacaoPorMatricula
+      .filter((r) => r.indicador !== undefined && !isNaN(r.indicador))
+      .sort((a, b) => b.indicador - a.indicador)
+      .slice(0, 30)
+      .map((r) => ({
+        name: r.matr,
+        matr: r.matr,
+        indicador: r.indicador,
+        solicitadas: r.solicitadas,
+        realizadas: r.realizadas,
+        nao_realizadas: r.nao_realizadas,
+        razao: r.razao,
+      }));
+  }, [relacaoPorMatricula]);
 
   // Resumo Textual
   const resumoFiltrosTexto = useMemo(() => {
@@ -764,112 +784,214 @@ export const ControleEvidencias: React.FC = () => {
           {/* 2º GRÁFICO ANALÍTICO: "Relação de Evidencias apresentadas e não apresentadas" */}
           {/* Sem texto descritivo longo acima; tooltips separados para Foto OK e Foto N-OK */}
           <div className="bg-[#111827] border border-slate-800 rounded-2xl p-6 shadow-xl print:hidden">
-            <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-800">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 pb-4 border-b border-slate-800">
               <h3 className="text-base font-bold text-white tracking-tight flex items-center gap-2">
                 <TrendingUp className="w-5 h-5 text-emerald-400" />
-                Relação de Evidencias apresentadas e não apresentadas
+                {chartMode === 'geral' 
+                  ? 'Relação de Evidencias apresentadas e não apresentadas' 
+                  : 'Relação de dados por matrícula (Ordenado por Indicador)'}
               </h3>
+
+              {/* Botões de Alternância do Gráfico */}
+              <div className="flex items-center gap-1.5 bg-[#0b0f19] p-1 rounded-xl border border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setChartMode('geral')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    chartMode === 'geral'
+                      ? 'bg-blue-600 text-white shadow'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Por Razão
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setChartMode('matricula')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    chartMode === 'matricula'
+                      ? 'bg-blue-600 text-white shadow'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Relação de dados por matrícula
+                </button>
+              </div>
             </div>
 
             <div className="h-[460px] w-full">
-              {chartDataAnalitico.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={chartDataAnalitico} margin={{ top: 20, right: 30, left: 10, bottom: 30 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#1f2937" />
-                    <XAxis
-                      dataKey="name"
-                      axisLine={{ stroke: '#374151' }}
-                      tickLine={false}
-                      tick={{ fill: '#9ca3af', fontSize: 11, fontWeight: '600' }}
-                      dy={10}
-                    />
-                    <YAxis
-                      axisLine={{ stroke: '#374151' }}
-                      tickLine={false}
-                      tick={{ fill: '#9ca3af', fontSize: 11 }}
-                    />
-                    <RechartsTooltip
-                      cursor={{ fill: 'rgba(255, 255, 255, 0.05)' }}
-                      content={({ active, payload }) => {
-                        if (active && payload && payload.length) {
-                          const data = payload[0].payload;
-                          const showRealizadas = hoveredBarType === 'realizadas' || (!hoveredBarType && payload[0].dataKey === 'realizadas');
-                          const isReal = showRealizadas;
-                          const matrs = isReal ? data.matrRealizadasList : data.matrNaoRealizadasList;
-                          const titleLabel = isReal ? 'Foto OK' : 'Foto N-OK';
-                          const titleColor = isReal ? 'text-emerald-400' : 'text-red-400';
-                          const totalVal = isReal ? data.realizadas : data.nao_realizadas;
+              {chartMode === 'geral' ? (
+                chartDataAnalitico.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={chartDataAnalitico} margin={{ top: 20, right: 30, left: 10, bottom: 30 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#1f2937" />
+                      <XAxis
+                        dataKey="name"
+                        axisLine={{ stroke: '#374151' }}
+                        tickLine={false}
+                        tick={{ fill: '#9ca3af', fontSize: 11, fontWeight: '600' }}
+                        dy={10}
+                      />
+                      <YAxis
+                        axisLine={{ stroke: '#374151' }}
+                        tickLine={false}
+                        tick={{ fill: '#9ca3af', fontSize: 11 }}
+                      />
+                      <RechartsTooltip
+                        cursor={{ fill: 'rgba(255, 255, 255, 0.05)' }}
+                        content={({ active, payload }) => {
+                          if (active && payload && payload.length) {
+                            const data = payload[0].payload;
+                            const showRealizadas = hoveredBarType === 'realizadas' || (!hoveredBarType && payload[0].dataKey === 'realizadas');
+                            const isReal = showRealizadas;
+                            const matrs = isReal ? data.matrRealizadasList : data.matrNaoRealizadasList;
+                            const titleLabel = isReal ? 'Foto OK' : 'Foto N-OK';
+                            const titleColor = isReal ? 'text-emerald-400' : 'text-red-400';
+                            const totalVal = isReal ? data.realizadas : data.nao_realizadas;
 
-                          return (
-                            <div className="bg-[#0b0f19] border border-slate-700 p-3.5 rounded-xl shadow-2xl text-xs space-y-2 min-w-[240px] max-w-[300px]">
-                              <div className="border-b border-slate-800 pb-1.5 flex items-center justify-between">
-                                <span className="font-bold text-white font-sans">{data.name}</span>
-                                <span className={`font-bold font-mono ${titleColor}`}>
-                                  {titleLabel}: {totalVal}
-                                </span>
-                              </div>
+                            return (
+                              <div className="bg-[#0b0f19] border border-slate-700 p-3.5 rounded-xl shadow-2xl text-xs space-y-2 min-w-[240px] max-w-[300px]">
+                                <div className="border-b border-slate-800 pb-1.5 flex items-center justify-between">
+                                  <span className="font-bold text-white font-sans">{data.name}</span>
+                                  <span className={`font-bold font-mono ${titleColor}`}>
+                                    {titleLabel}: {totalVal}
+                                  </span>
+                                </div>
 
-                              <div className="overflow-x-auto max-h-40 custom-scrollbar border border-slate-800 rounded-lg">
-                                <table className="w-full text-left text-[11px] border-collapse font-mono">
-                                  <thead className="bg-[#111827] text-slate-400 uppercase font-semibold border-b border-slate-800">
-                                    <tr>
-                                      <th className="py-1 px-2.5">Matr</th>
-                                      <th className="py-1 px-2.5 text-right">Quantidade</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody className="divide-y divide-slate-800/60">
-                                    {matrs && matrs.length > 0 ? (
-                                      matrs.map((m: { matr: string; qtd: number }, idx: number) => (
-                                        <tr key={idx} className="hover:bg-slate-800/30">
-                                          <td className="py-1 px-2.5 text-slate-200 font-bold">{m.matr}</td>
-                                          <td className={`py-1 px-2.5 text-right font-bold ${titleColor}`}>{m.qtd}</td>
-                                        </tr>
-                                      ))
-                                    ) : (
+                                <div className="overflow-x-auto max-h-40 custom-scrollbar border border-slate-800 rounded-lg">
+                                  <table className="w-full text-left text-[11px] border-collapse font-mono">
+                                    <thead className="bg-[#111827] text-slate-400 uppercase font-semibold border-b border-slate-800">
                                       <tr>
-                                        <td colSpan={2} className="py-2 text-center text-slate-500 font-sans italic">
-                                          Nenhum registro.
-                                        </td>
+                                        <th className="py-1 px-2.5">Matr</th>
+                                        <th className="py-1 px-2.5 text-right">Quantidade</th>
                                       </tr>
-                                    )}
-                                  </tbody>
-                                </table>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-800/60">
+                                      {matrs && matrs.length > 0 ? (
+                                        matrs.map((m: { matr: string; qtd: number }, idx: number) => (
+                                          <tr key={idx} className="hover:bg-slate-800/30">
+                                            <td className="py-1 px-2.5 text-slate-200 font-bold">{m.matr}</td>
+                                            <td className={`py-1 px-2.5 text-right font-bold ${titleColor}`}>{m.qtd}</td>
+                                          </tr>
+                                        ))
+                                      ) : (
+                                        <tr>
+                                          <td colSpan={2} className="py-2 text-center text-slate-500 font-sans italic">
+                                            Nenhum registro.
+                                          </td>
+                                        </tr>
+                                      )}
+                                    </tbody>
+                                  </table>
+                                </div>
                               </div>
-                            </div>
-                          );
-                        }
-                        return null;
-                      }}
-                    />
-                    <Legend
-                      verticalAlign="top"
-                      align="right"
-                      wrapperStyle={{ paddingBottom: '10px' }}
-                    />
-                    <Bar
-                      dataKey="realizadas"
-                      name="Foto OK"
-                      fill="#10b981"
-                      radius={[4, 4, 0, 0]}
-                      barSize={28}
-                      onMouseEnter={() => setHoveredBarType('realizadas')}
-                      onMouseLeave={() => setHoveredBarType(null)}
-                    />
-                    <Bar
-                      dataKey="nao_realizadas"
-                      name="Foto N-OK"
-                      fill="#ef4444"
-                      radius={[4, 4, 0, 0]}
-                      barSize={28}
-                      onMouseEnter={() => setHoveredBarType('nao_realizadas')}
-                      onMouseLeave={() => setHoveredBarType(null)}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
+                            );
+                          }
+                          return null;
+                        }}
+                      />
+                      <Legend
+                        verticalAlign="top"
+                        align="right"
+                        wrapperStyle={{ paddingBottom: '10px' }}
+                      />
+                      <Bar
+                        dataKey="realizadas"
+                        name="Foto OK"
+                        fill="#10b981"
+                        radius={[4, 4, 0, 0]}
+                        barSize={28}
+                        onMouseEnter={() => setHoveredBarType('realizadas')}
+                        onMouseLeave={() => setHoveredBarType(null)}
+                      />
+                      <Bar
+                        dataKey="nao_realizadas"
+                        name="Foto N-OK"
+                        fill="#ef4444"
+                        radius={[4, 4, 0, 0]}
+                        barSize={28}
+                        onMouseEnter={() => setHoveredBarType('nao_realizadas')}
+                        onMouseLeave={() => setHoveredBarType(null)}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-full flex items-center justify-center text-slate-500 text-xs">
+                    Sem dados para os filtros selecionados.
+                  </div>
+                )
               ) : (
-                <div className="h-full flex items-center justify-center text-slate-500 text-xs">
-                  Sem dados para os filtros selecionados.
-                </div>
+                /* MODO MATRÍCULA: ORDENADO DECRESCENTE PELO INDICADOR */
+                chartDataMatricula.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={chartDataMatricula} margin={{ top: 20, right: 30, left: 10, bottom: 40 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#1f2937" />
+                      <XAxis
+                        dataKey="name"
+                        axisLine={{ stroke: '#374151' }}
+                        tickLine={false}
+                        tick={{ fill: '#9ca3af', fontSize: 10, fontWeight: '600' }}
+                        interval={0}
+                        angle={-45}
+                        textAnchor="end"
+                        height={60}
+                      />
+                      <YAxis
+                        axisLine={{ stroke: '#374151' }}
+                        tickLine={false}
+                        tick={{ fill: '#9ca3af', fontSize: 11 }}
+                        unit="%"
+                        domain={[0, 100]}
+                      />
+                      <RechartsTooltip
+                        cursor={{ fill: 'rgba(255, 255, 255, 0.05)' }}
+                        content={({ active, payload }) => {
+                          if (active && payload && payload.length) {
+                            const data = payload[0].payload;
+                            return (
+                              <div className="bg-[#0b0f19] border border-slate-700 p-3.5 rounded-xl shadow-2xl text-xs space-y-2 min-w-[220px]">
+                                <div className="border-b border-slate-800 pb-1.5 flex items-center justify-between">
+                                  <span className="font-bold text-white font-mono">Matrícula: {data.matr}</span>
+                                  <span className="text-[11px] text-slate-400">Rz {data.razao}</span>
+                                </div>
+                                <div className="space-y-1 font-mono text-[11px]">
+                                  <div className="flex justify-between text-amber-400 font-bold">
+                                    <span>Indicador:</span>
+                                    <span>{data.indicador.toFixed(2).replace('.', ',')}%</span>
+                                  </div>
+                                  <div className="flex justify-between text-slate-300">
+                                    <span>Solicitadas:</span>
+                                    <span>{data.solicitadas.toLocaleString('pt-BR')}</span>
+                                  </div>
+                                  <div className="flex justify-between text-emerald-400">
+                                    <span>Fotos OK:</span>
+                                    <span>{data.realizadas.toLocaleString('pt-BR')}</span>
+                                  </div>
+                                  <div className="flex justify-between text-red-400">
+                                    <span>Fotos N-OK:</span>
+                                    <span>{data.nao_realizadas.toLocaleString('pt-BR')}</span>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          }
+                          return null;
+                        }}
+                      />
+                      <Bar
+                        dataKey="indicador"
+                        name="Indicador (%)"
+                        fill="#3b82f6"
+                        radius={[4, 4, 0, 0]}
+                        barSize={20}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-full flex items-center justify-center text-slate-500 text-xs">
+                    Sem dados de matrícula para os filtros selecionados.
+                  </div>
+                )
               )}
             </div>
           </div>

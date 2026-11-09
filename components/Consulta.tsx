@@ -316,15 +316,15 @@ export const Consulta: React.FC = () => {
       {/* RESULTADOS DA CONSULTA */}
       {hasSearched && searchResults.length > 0 && (
         <div className="space-y-8 animate-fade-in">
-          {/* TABELA PRINCIPAL */}
+          {/* TABELA PRINCIPAL: 2. HISTÓRICO TÉCNICO */}
           <div className="bg-[#111827] border border-slate-800 rounded-2xl shadow-xl overflow-hidden print:border print:border-slate-300 print:bg-white print:text-black">
             <div className="p-4 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#0d1322] print:hidden">
               <div className="flex items-center gap-3">
                 <span className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
                   <Database className="w-4 h-4 text-cyan-400" />
-                  Histórico Técnico ({searchResults.length} leituras encontradas)
+                  2. Histórico Técnico ({searchResults.length} leituras encontradas)
                 </span>
-                <span className="text-xs font-mono px-2.5 py-0.5 rounded-full bg-blue-500/10 text-cyan-400 border border-blue-500/20">
+                <span className="text-xs font-mono px-2.5 py-0.5 rounded-md bg-blue-500/10 text-cyan-400 border border-blue-500/20">
                   {instalacao ? `Instalação: ${formatInstalacao(instalacao)}` : `Medidor: ${medidor}`}
                 </span>
               </div>
@@ -346,65 +346,50 @@ export const Consulta: React.FC = () => {
               </div>
             </div>
 
+            {/* Planilha de Dados Limpa */}
             <div className="overflow-x-auto custom-scrollbar">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead className="bg-[#0b0f19] text-slate-400 uppercase tracking-wider font-semibold border-b border-slate-800">
+              <table className="w-full text-left text-[12px] border-collapse">
+                <thead className="bg-[#0b101d] text-slate-300 uppercase tracking-wider font-semibold border-b border-slate-700">
                   <tr>
-                    <th className="py-3 px-3.5 whitespace-nowrap">MES</th>
-                    <th className="py-3 px-3.5 whitespace-nowrap">ANO</th>
-                    <th className="py-3 px-3.5 whitespace-nowrap">UL</th>
-                    <th className="py-3 px-3.5 whitespace-nowrap">INSTALAÇÃO</th>
-                    <th className="py-3 px-3.5 whitespace-nowrap">MEDIDOR</th>
-                    <th className="py-3 px-3.5 whitespace-nowrap">REG</th>
-                    <th className="py-3 px-3.5 whitespace-nowrap">MATR</th>
-                    <th className="py-3 px-3.5 whitespace-nowrap text-center">NL</th>
-                    <th className="py-3 px-3.5 whitespace-nowrap text-right">LEITURA</th>
-                    <th className="py-3 px-3.5 whitespace-nowrap text-right">CONSUMO</th>
-                    <th className="py-3 px-3.5 whitespace-nowrap text-center">DIG</th>
-                    <th className="py-3 px-3.5 whitespace-nowrap text-center">FOTO</th>
-                    <th className="py-3 px-3.5 whitespace-nowrap">NOSB.IMP</th>
-                    <th className="py-3 px-3.5 whitespace-nowrap">NOSB.SIM</th>
+                    <th className="py-2.5 px-3 whitespace-nowrap border-r border-slate-800/80">MES</th>
+                    <th className="py-2.5 px-3 whitespace-nowrap border-r border-slate-800/80">ANO</th>
+                    <th className="py-2.5 px-3 whitespace-nowrap border-r border-slate-800/80">UL</th>
+                    <th className="py-2.5 px-3 whitespace-nowrap border-r border-slate-800/80">INSTALAÇÃO</th>
+                    <th className="py-2.5 px-3 whitespace-nowrap border-r border-slate-800/80">MEDIDOR</th>
+                    <th className="py-2.5 px-3 whitespace-nowrap border-r border-slate-800/80">REG</th>
+                    <th className="py-2.5 px-3 whitespace-nowrap border-r border-slate-800/80">MATR</th>
+                    <th className="py-2.5 px-3 whitespace-nowrap text-center border-r border-slate-800/80">NL</th>
+                    <th className="py-2.5 px-3 whitespace-nowrap text-right border-r border-slate-800/80">LEITURA</th>
+                    <th className="py-2.5 px-3 whitespace-nowrap text-right border-r border-slate-800/80">CONSUMO</th>
+                    <th className="py-2.5 px-3 whitespace-nowrap text-center border-r border-slate-800/80">DIG</th>
+                    <th className="py-2.5 px-3 whitespace-nowrap text-center border-r border-slate-800/80">FOTO</th>
+                    <th className="py-2.5 px-3 whitespace-nowrap border-r border-slate-800/80">NOSB.IMP</th>
+                    <th className="py-2.5 px-3 whitespace-nowrap">NOSB.SIM</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800 font-mono tabular-nums">
+                <tbody className="divide-y divide-slate-800/80 font-mono tabular-nums text-slate-200">
                   {searchResults.map((row, idx) => (
-                    <tr key={idx} className="hover:bg-slate-800/40 transition-colors">
-                      <td className="py-2.5 px-3.5 font-bold text-white font-sans">{row.Mes}</td>
-                      <td className="py-2.5 px-3.5 text-slate-300">{row.Ano}</td>
-                      <td className="py-2.5 px-3.5 text-blue-400 font-bold">{row.rz_ul_lv}</td>
-                      <td className="py-2.5 px-3.5 text-cyan-300 font-black">{formatInstalacao(row.instalacao)}</td>
-                      <td className="py-2.5 px-3.5 text-slate-200">{row.medidor}</td>
-                      <td className="py-2.5 px-3.5 text-slate-400">{row.reg}</td>
-                      <td className="py-2.5 px-3.5 text-slate-300">{row.matr}</td>
-                      <td className="py-2.5 px-3.5 text-center">
-                        <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${
-                          String(row.nl) === '0'
-                            ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                            : 'bg-red-500/15 text-red-400 border border-red-500/30'
-                        }`}>
-                          {row.nl}
-                        </span>
-                      </td>
-                      <td className="py-2.5 px-3.5 text-right font-bold text-white">
+                    <tr key={idx} className="hover:bg-slate-800/30 transition-colors odd:bg-[#0c121e] even:bg-[#101726]">
+                      <td className="py-2 px-3 border-r border-slate-800/60 font-sans text-slate-200">{row.Mes}</td>
+                      <td className="py-2 px-3 border-r border-slate-800/60 text-slate-200">{row.Ano}</td>
+                      <td className="py-2 px-3 border-r border-slate-800/60 text-slate-200">{row.rz_ul_lv}</td>
+                      <td className="py-2 px-3 border-r border-slate-800/60 text-slate-200 font-semibold">{formatInstalacao(row.instalacao)}</td>
+                      <td className="py-2 px-3 border-r border-slate-800/60 text-slate-200">{row.medidor}</td>
+                      <td className="py-2 px-3 border-r border-slate-800/60 text-slate-200">{row.reg}</td>
+                      <td className="py-2 px-3 border-r border-slate-800/60 text-slate-200">{row.matr}</td>
+                      <td className="py-2 px-3 border-r border-slate-800/60 text-center text-slate-200 font-bold">{row.nl}</td>
+                      <td className="py-2 px-3 border-r border-slate-800/60 text-right text-slate-200">
                         {Number(row.l_atual).toLocaleString('pt-BR')}
                       </td>
-                      <td className="py-2.5 px-3.5 text-right font-black text-blue-400">
+                      <td className="py-2 px-3 border-r border-slate-800/60 text-right text-slate-200">
                         {Number(row.consumo).toLocaleString('pt-BR')}
                       </td>
-                      <td className="py-2.5 px-3.5 text-center text-slate-300">{row.digitacao}</td>
-                      <td className="py-2.5 px-3.5 text-center">
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                          String(row.foto).toUpperCase() === 'OK'
-                            ? 'bg-emerald-500/20 text-emerald-300'
-                            : 'bg-slate-800 text-slate-400'
-                        }`}>
-                          {row.foto || '—'}
-                        </span>
-                      </td>
-                      <td className="py-2.5 px-3.5 font-sans text-slate-400 text-[11px]">
+                      <td className="py-2 px-3 border-r border-slate-800/60 text-center text-slate-200">{row.digitacao}</td>
+                      <td className="py-2 px-3 border-r border-slate-800/60 text-center text-slate-200">{row.foto || '—'}</td>
+                      <td className="py-2 px-3 border-r border-slate-800/60 font-sans text-slate-200 text-[11px] truncate max-w-[140px]" title={row.nosb_impedimento}>
                         {row.nosb_impedimento || '—'}
                       </td>
-                      <td className="py-2.5 px-3.5 font-sans text-slate-400 text-[11px]">
+                      <td className="py-2 px-3 font-sans text-slate-200 text-[11px] truncate max-w-[140px]" title={row.nosb_simulacao}>
                         {row.nosb_simulacao || '—'}
                       </td>
                     </tr>
@@ -454,12 +439,12 @@ export const Consulta: React.FC = () => {
               </div>
             </div>
 
-            {/* GRÁFICO E PROGRESSÃO DE CONSUMO */}
+            {/* GRÁFICO DE PROGRESSÃO DE CONSUMO (SOMENTE GRÁFICO) */}
             <div className="lg:col-span-2 bg-[#111827] border border-slate-800 rounded-2xl p-6 shadow-xl flex flex-col space-y-4">
               <div className="flex items-center justify-between pb-2 border-b border-slate-800">
                 <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
                   <TrendingUp className="w-4 h-4 text-cyan-400" />
-                  Progressão de Consumo (Gráfico & Tabela)
+                  Progressão de Consumo
                 </h3>
                 <span className="text-[11px] text-slate-400 font-mono">
                   Consumo Histórico em kWh
@@ -467,7 +452,7 @@ export const Consulta: React.FC = () => {
               </div>
 
               {/* GRÁFICO VERTICAL DE CONSUMO */}
-              <div className="h-56 w-full">
+              <div className="h-72 w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={consumoProgression} margin={{ top: 20, right: 20, left: 0, bottom: 10 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" vertical={false} />
@@ -520,42 +505,6 @@ export const Consulta: React.FC = () => {
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
-              </div>
-
-              {/* Tabela de Detalhes da Progressão */}
-              <div className="overflow-y-auto max-h-[160px] custom-scrollbar border-t border-slate-800 pt-3">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead className="bg-[#0b0f19] text-slate-400 uppercase tracking-wider font-semibold border-b border-slate-800">
-                    <tr>
-                      <th className="py-2 px-3 whitespace-nowrap">PERÍODO</th>
-                      <th className="py-2 px-3 text-right whitespace-nowrap">LEITURA (MEDIDA)</th>
-                      <th className="py-2 px-3 text-right whitespace-nowrap">CONSUMO (kWh)</th>
-                      <th className="py-2 px-3 text-center whitespace-nowrap">NL</th>
-                      <th className="py-2 px-3 whitespace-nowrap">SITUAÇÃO</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800 font-mono tabular-nums">
-                    {consumoProgression.map((item, idx) => (
-                      <tr key={idx} className="hover:bg-slate-800/30">
-                        <td className="py-1.5 px-3 text-slate-200 font-sans font-medium">{item.periodoCompleto}</td>
-                        <td className="py-1.5 px-3 text-right text-slate-300">
-                          {item.leitura.toLocaleString('pt-BR')}
-                        </td>
-                        <td className="py-1.5 px-3 text-right font-bold text-cyan-400">
-                          {item.consumo.toLocaleString('pt-BR')}
-                        </td>
-                        <td className="py-1.5 px-3 text-center">
-                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${item.nl === '0' ? 'text-emerald-400 bg-emerald-500/10' : 'text-red-400 bg-red-500/10'}`}>
-                            {item.nl}
-                          </span>
-                        </td>
-                        <td className="py-1.5 px-3 font-sans text-slate-400 text-[11px] truncate max-w-[180px]">
-                          {item.impedimento}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
               </div>
             </div>
           </div>

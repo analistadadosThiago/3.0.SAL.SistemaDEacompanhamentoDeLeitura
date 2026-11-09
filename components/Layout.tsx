@@ -4,7 +4,7 @@ import Logo from './Logo';
 import { 
   LayoutDashboard, Search, Users, Camera, ShieldCheck,
   Clock, GitCommit, Printer, FileQuestion, Database,
-  ChevronLeft, ChevronRight, Menu, ChevronDown
+  ChevronLeft, ChevronRight, Menu, ChevronDown, TrendingUp
 } from 'lucide-react';
 
 export type TabType = 
@@ -13,6 +13,7 @@ export type TabType =
   | 'controle'
   | 'evidencias'
   | 'consistencia'
+  | 'producao'
   | 'horario'
   | 'sequencia'
   | 'impressao'
@@ -77,6 +78,7 @@ export const Layout: React.FC<LayoutProps> = ({
         { id: 'controle', icon: Users, label: '3.1. Controle de Leiturista', num: '3.1' },
         { id: 'evidencias', icon: Camera, label: '3.2. Controle de Evidência', num: '3.2' },
         { id: 'consistencia', icon: ShieldCheck, label: '3.3. Controle de Consistência', num: '3.3' },
+        { id: 'producao', icon: TrendingUp, label: '3.4. Controle de Produção', num: '3.4' },
       ],
     },
     {

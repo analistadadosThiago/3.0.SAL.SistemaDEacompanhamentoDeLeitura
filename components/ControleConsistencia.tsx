@@ -161,7 +161,11 @@ export const ControleConsistencia: React.FC = () => {
 
     // Sheet 1: Relação Quantitativa
     const quantHeaders = ['RAZÃO', 'MOTIVO DA CONSISTENCIA', 'QUANTIDADE', 'INDICADOR'];
-    const quantRows = relacaoQuantitativa.map((q) => [q.razao, q.motivo, q.quantidade, q.indicador]);
+    const totalQtd = relacaoQuantitativa.reduce((acc, q) => acc + q.quantidade, 0);
+    const quantRows = [
+      ...relacaoQuantitativa.map((q) => [q.razao, q.motivo, q.quantidade, q.indicador]),
+      ['TOTAL', '—', totalQtd, '100,00%']
+    ];
     const wsQuant = XLSX.utils.aoa_to_sheet([...titleRows, quantHeaders, ...quantRows]);
 
     // Sheet 2: Dados Selecionados (Ordem exata: MES, ANO, RAZÃO, UL, INSTALAÇÃO, MEDIDOR, REG, FOTO, MATR, NL, LEITURA, CONSISTENCIA)
@@ -285,7 +289,7 @@ export const ControleConsistencia: React.FC = () => {
                 <option value="">Todas as Razões</option>
                 {opcoesRazoes.map((rz) => (
                   <option key={rz} value={rz}>
-                    RZ {rz}
+                    {rz}
                   </option>
                 ))}
               </select>
@@ -404,6 +408,16 @@ export const ControleConsistencia: React.FC = () => {
                       </td>
                     </tr>
                   ))}
+                  {relacaoQuantitativa.length > 0 && (
+                    <tr className="bg-[#080d1a] border-t-2 border-blue-500/40 font-bold text-white">
+                      <td className="py-3 px-4 font-black uppercase text-cyan-400">TOTAL</td>
+                      <td className="py-3 px-4 text-slate-300 font-sans">—</td>
+                      <td className="py-3 px-4 text-right font-black text-cyan-300">
+                        {relacaoQuantitativa.reduce((acc, curr) => acc + curr.quantidade, 0).toLocaleString('pt-BR')}
+                      </td>
+                      <td className="py-3 px-4 text-right font-black text-emerald-400">100,00%</td>
+                    </tr>
+                  )}
                   {relacaoQuantitativa.length === 0 && (
                     <tr>
                       <td colSpan={4} className="py-6 text-center text-slate-500 font-sans">

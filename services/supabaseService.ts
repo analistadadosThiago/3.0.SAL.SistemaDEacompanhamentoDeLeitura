@@ -82,7 +82,17 @@ export function mapSupabaseRecordToFieldRecord(raw: any): FieldRecord {
  * until a response returns fewer than 1000 rows.
  * Combines all blocks into a single array before returning.
  */
-export async function fetchSupabaseBaseLeitura(onProgress?: (loadedCount: number) => void): Promise<FieldRecord[]> {
+/**
+ * Fetches 100% of records from Supabase BaseLeitura API using pagination.
+ * Successively calls limit=1000 with offset=0, offset=1000, offset=2000, and so on,
+ * until a response returns fewer than 1000 rows.
+ * Streams batches progressively via onBatchLoaded to avoid blocking the initial UI,
+ * while ensuring 100% of records are completely loaded.
+ */
+export async function fetchSupabaseBaseLeitura(
+  onProgress?: (loadedCount: number) => void,
+  onBatchLoaded?: (newBatch: FieldRecord[], totalSoFar: number) => void
+): Promise<FieldRecord[]> {
   const headers = {
     'apikey': SUPABASE_API_KEY,
     'Authorization': `Bearer ${SUPABASE_API_KEY}`,
@@ -91,7 +101,7 @@ export async function fetchSupabaseBaseLeitura(onProgress?: (loadedCount: number
 
   const limit = 1000;
   let offset = 0;
-  let allRawRecords: any[] = [];
+  let allMappedRecords: FieldRecord[] = [];
   let keepGoing = true;
 
   // Process concurrent batches of offsets to accelerate loading while strictly paging in order
@@ -119,10 +129,14 @@ export async function fetchSupabaseBaseLeitura(onProgress?: (loadedCount: number
       for (let i = 0; i < results.length; i++) {
         const batch = results[i];
         if (batch.length > 0) {
-          allRawRecords = allRawRecords.concat(batch);
+          const mappedBatch = batch.map(mapSupabaseRecordToFieldRecord);
+          allMappedRecords = allMappedRecords.concat(mappedBatch);
+          if (onBatchLoaded) {
+            onBatchLoaded(mappedBatch, allMappedRecords.length);
+          }
         }
         if (onProgress) {
-          onProgress(allRawRecords.length);
+          onProgress(allMappedRecords.length);
         }
         if (batch.length < limit) {
           keepGoing = false;
@@ -133,7 +147,7 @@ export async function fetchSupabaseBaseLeitura(onProgress?: (loadedCount: number
       offset += CONCURRENCY * limit;
     }
 
-    return allRawRecords.map(mapSupabaseRecordToFieldRecord);
+    return allMappedRecords;
   } catch (err: any) {
     console.error('Erro na conexão com Supabase:', err);
     throw new Error(err.message || 'Falha ao buscar dados na API do Supabase.');

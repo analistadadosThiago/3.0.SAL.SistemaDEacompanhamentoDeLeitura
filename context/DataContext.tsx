@@ -13,6 +13,7 @@ interface DataContextType {
   opcoesMeses: string[];
   opcoesRazoes: string[];
   opcoesMatriculas: string[];
+  opcoesCiclos: string[];
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -28,10 +29,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setLoading(true);
     setLoadingCount(0);
     setError(null);
+    let accumulated: FieldRecord[] = [];
     try {
-      const data = await fetchSupabaseBaseLeitura((count) => {
-        setLoadingCount(count);
-      });
+      const data = await fetchSupabaseBaseLeitura(
+        (count) => {
+          setLoadingCount(count);
+        },
+        (newBatch) => {
+          accumulated = accumulated.concat(newBatch);
+          // Atualiza registros progressivamente em memória para liberar tela imediatamente
+          setRecords([...accumulated]);
+          setIsConfigured(true);
+        }
+      );
       setRecords(data);
       setIsConfigured(true);
     } catch (err: any) {
@@ -71,20 +81,39 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   }, [records]);
 
+  // Filtro de Razão (rz): mostra apenas os valores que realmente existem na base de dados (não traz opções vazias ou que não estão nos dados)
   const opcoesRazoes = useMemo(() => {
     const set = new Set<string>();
     records.forEach(r => {
-      if (r.rz) set.add(String(r.rz).padStart(2, '0'));
+      const rawRz = String(r.rz ?? '').trim();
+      if (rawRz && rawRz !== '0' && rawRz !== '00') {
+        const numVal = parseInt(rawRz, 10);
+        if (!isNaN(numVal) && numVal > 0) {
+          set.add(String(numVal).padStart(2, '0'));
+        }
+      }
     });
-    return Array.from(set).sort();
+    return Array.from(set).sort((a, b) => Number(a) - Number(b));
   }, [records]);
 
   const opcoesMatriculas = useMemo(() => {
     const set = new Set<string>();
     records.forEach(r => {
-      if (r.matr) set.add(String(r.matr).trim());
+      if (r.matr && String(r.matr).trim()) {
+        set.add(String(r.matr).trim());
+      }
     });
     return Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  }, [records]);
+
+  const opcoesCiclos = useMemo(() => {
+    const set = new Set<string>();
+    records.forEach(r => {
+      if (r.ciclo && String(r.ciclo).trim()) {
+        set.add(String(r.ciclo).trim());
+      }
+    });
+    return Array.from(set).sort();
   }, [records]);
 
   return (
@@ -100,6 +129,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         opcoesMeses,
         opcoesRazoes,
         opcoesMatriculas,
+        opcoesCiclos,
       }}
     >
       {children}

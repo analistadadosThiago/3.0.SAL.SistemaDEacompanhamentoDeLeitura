@@ -10,10 +10,11 @@ import ControleImpressao from './components/ControleImpressao';
 import ControleSimulacao from './components/ControleSimulacao';
 import ControleHorario from './components/ControleHorario';
 import SequenciaLeitura from './components/SequenciaLeitura';
-import { Loader2, AlertTriangle, RefreshCw } from 'lucide-react';
+import ControleProducao from './components/ControleProducao';
+import { AlertTriangle, RefreshCw } from 'lucide-react';
 
 const AppContent: React.FC = () => {
-  const { loading, loadingCount, error, records, reloadSupabaseData } = useData();
+  const { error, records, reloadSupabaseData } = useData();
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
 
   const getSectionTitle = () => {
@@ -23,6 +24,7 @@ const AppContent: React.FC = () => {
       case 'controle': return '3.1. Controle de Leiturista';
       case 'evidencias': return '3.2. Controle de Evidência';
       case 'consistencia': return '3.3. Controle de Consistência';
+      case 'producao': return '3.4. Controle de Produção';
       case 'horario': return '4.1. Controle de Horário';
       case 'sequencia': return '4.2. Sequência de Leitura';
       case 'impressao': return "5.1. N'OSB – Impedimento";
@@ -30,33 +32,6 @@ const AppContent: React.FC = () => {
       default: return 'Sistema de Análise de Leitura';
     }
   };
-
-  // Se estiver no carregamento inicial antes de ter registros
-  if (loading && records.length === 0) {
-    return (
-      <div className="min-h-screen bg-[#080c14] flex flex-col items-center justify-center p-6 text-slate-100 font-sans">
-        <div className="bg-[#111827] border border-slate-800 rounded-3xl p-8 max-w-md w-full shadow-2xl flex flex-col items-center text-center space-y-4 animate-fade-in">
-          <div className="relative">
-            <div className="w-16 h-16 rounded-2xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-cyan-400">
-              <Loader2 className="w-8 h-8 animate-spin" />
-            </div>
-          </div>
-          <div>
-            <h2 className="text-lg font-bold text-white tracking-tight">SAL – Sistema de Análise de Leitura</h2>
-            <p className="text-xs text-slate-400 mt-1">
-              {loadingCount > 0 
-                ? `Carregando registros: ${loadingCount.toLocaleString('pt-BR')} linhas lidas...` 
-                : 'Conectando à base Supabase via paginação...'
-              }
-            </p>
-          </div>
-          <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
-            <div className="bg-gradient-to-r from-blue-500 to-cyan-400 h-full w-full animate-pulse"></div>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   // Se houver erro de conexão inicial sem registros
   if (error && records.length === 0) {
@@ -93,6 +68,7 @@ const AppContent: React.FC = () => {
         {activeTab === 'controle' && <ControleLeiturista />}
         {activeTab === 'evidencias' && <ControleEvidencias />}
         {activeTab === 'consistencia' && <ControleConsistencia />}
+        {activeTab === 'producao' && <ControleProducao />}
         {activeTab === 'horario' && <ControleHorario />}
         {activeTab === 'sequencia' && <SequenciaLeitura />}
         {activeTab === 'impressao' && <ControleImpressao />}

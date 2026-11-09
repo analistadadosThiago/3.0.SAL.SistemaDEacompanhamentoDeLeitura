@@ -33,6 +33,10 @@ export const ControleLeiturista: React.FC = () => {
   const [pageMatr, setPageMatr] = useState<number>(1);
   const [pageGeral, setPageGeral] = useState<number>(1);
   const [filtroNlGeral, setFiltroNlGeral] = useState<string>('');
+  const [filtroMatrTabela, setFiltroMatrTabela] = useState<string>('');
+
+  // Aba do Gráfico: 'geral' | 'tipo'
+  const [chartTab, setChartTab] = useState<'geral' | 'tipo'>('geral');
 
   const [showWarningModal, setShowWarningModal] = useState<boolean>(false);
   const [warningCollaborators, setWarningCollaborators] = useState<Array<{
@@ -294,13 +298,73 @@ export const ControleLeiturista: React.FC = () => {
       .sort((a, b) => b.quantidade - a.quantidade);
   }, [rawFilteredRecords, hasGenerated]);
 
+  // Gráfico do Menu: Aba "Por Tipo" - impedimentos por TIPO (URBANO, POVOADO, RURAL)
+  const chartDataImpedimentosPorTipo = useMemo(() => {
+    if (!hasGenerated) return [];
+
+    const tipoMap = new Map<string, {
+      tipo: string;
+      quantidade: number;
+      matriculasMap: Map<string, number>;
+    }>();
+
+    ['URBANO', 'POVOADO', 'RURAL'].forEach((t) => {
+      tipoMap.set(t, { tipo: t, quantidade: 0, matriculasMap: new Map() });
+    });
+
+    rawFilteredRecords.forEach((r) => {
+      const isImp = EXTENDED_CODES_SET.has(String(r.nl || '').trim());
+      if (isImp) {
+        let t = (r.tipo || 'URBANO').trim().toUpperCase();
+        if (t.includes('URB')) t = 'URBANO';
+        else if (t.includes('POV')) t = 'POVOADO';
+        else if (t.includes('RUR')) t = 'RURAL';
+        else t = 'URBANO';
+
+        if (!tipoMap.has(t)) {
+          tipoMap.set(t, { tipo: t, quantidade: 0, matriculasMap: new Map() });
+        }
+        const item = tipoMap.get(t)!;
+        item.quantidade += 1;
+        const matr = String(r.matr || 'SEM_MATR').trim();
+        item.matriculasMap.set(matr, (item.matriculasMap.get(matr) || 0) + 1);
+      }
+    });
+
+    return Array.from(tipoMap.values())
+      .map((item) => ({
+        name: item.tipo,
+        tipo: item.tipo,
+        quantidade: item.quantidade,
+        matriculasDetalhadas: Array.from(item.matriculasMap.entries())
+          .map(([matr, qtd]) => ({ matr, qtd }))
+          .sort((a, b) => b.qtd - a.qtd),
+      }))
+      .sort((a, b) => b.quantidade - a.quantidade);
+  }, [rawFilteredRecords, hasGenerated]);
+
+  // Opções de MATR presentes na tabela agrupada
+  const opcoesMatrTabela = useMemo(() => {
+    const set = new Set<string>();
+    groupedData.forEach((d) => {
+      if (d.matr) set.add(d.matr);
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  }, [groupedData]);
+
+  // Dados agrupados com filtro local por MATR
+  const filteredGroupedData = useMemo(() => {
+    if (!filtroMatrTabela) return groupedData;
+    return groupedData.filter((d) => d.matr === filtroMatrTabela);
+  }, [groupedData, filtroMatrTabela]);
+
   // Paginações
   const paginatedMatrData = useMemo(() => {
     const start = (pageMatr - 1) * PAGE_SIZE;
-    return groupedData.slice(start, start + PAGE_SIZE);
-  }, [groupedData, pageMatr]);
+    return filteredGroupedData.slice(start, start + PAGE_SIZE);
+  }, [filteredGroupedData, pageMatr]);
 
-  const totalPagesMatr = Math.ceil(groupedData.length / PAGE_SIZE) || 1;
+  const totalPagesMatr = Math.ceil(filteredGroupedData.length / PAGE_SIZE) || 1;
 
   const paginatedGeralData = useMemo(() => {
     const start = (pageGeral - 1) * PAGE_SIZE;
@@ -693,107 +757,215 @@ export const ControleLeiturista: React.FC = () => {
             </div>
           </div>
 
-          {/* GRÁFICO VERTICAL: RELAÇÃO DE NL REALIZADAS COMO IMPEDIMENTO */}
-          {/* No hover da barra, mostra a quantidade de NL atribuída por Matrícula */}
+          {/* GRÁFICO VERTICAL COM ABAS: GERAL E POR TIPO */}
           <div className="bg-[#111827] border border-slate-800 rounded-2xl p-6 shadow-xl">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
               <div>
                 <div className="flex items-center gap-2">
                   <BarChart3 className="w-5 h-5 text-cyan-400" />
                   <h3 className="text-base font-bold text-white tracking-tight">
-                    Relação de NL realizadas como impedimento
+                    {chartTab === 'geral' ? 'Relação de NL realizadas como impedimento' : 'Impedimentos por Tipo de Leitura'}
                   </h3>
                 </div>
                 <p className="text-xs text-slate-400 mt-1">
-                  Passe o cursor sobre cada código de não-leitura para verificar as ocorrências discriminadas por Matrícula
+                  {chartTab === 'geral'
+                    ? 'Passe o cursor sobre cada código de não-leitura para verificar as ocorrências discriminadas por Matrícula'
+                    : 'Quantidade total de impedimentos classificados por tipo de leitura (Urbano, Povoado, Rural)'}
                 </p>
               </div>
-              <span className="text-xs px-2.5 py-1 bg-blue-500/10 border border-blue-500/20 text-cyan-400 rounded-lg font-mono font-semibold self-start sm:self-auto">
-                {chartDataCodigosNl.length} códigos ativos
-              </span>
+
+              {/* Seletor de abas do gráfico */}
+              <div className="flex items-center gap-1 bg-[#0b0f19] p-1 rounded-xl border border-slate-800 self-start sm:self-auto">
+                <button
+                  type="button"
+                  onClick={() => setChartTab('geral')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    chartTab === 'geral'
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Geral
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setChartTab('tipo')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    chartTab === 'tipo'
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Por Tipo
+                </button>
+              </div>
             </div>
 
             <div className="h-72 w-full">
-              {chartDataCodigosNl.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={chartDataCodigosNl}
-                    margin={{ top: 25, right: 30, left: 10, bottom: 20 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" vertical={false} />
-                    <XAxis
-                      dataKey="codigo"
-                      stroke="#6b7280"
-                      tickLine={false}
-                      tick={{ fill: '#9ca3af', fontSize: 11, fontWeight: '600' }}
-                      dy={10}
-                    />
-                    <YAxis
-                      stroke="#6b7280"
-                      tickLine={false}
-                      tick={{ fill: '#9ca3af', fontSize: 11 }}
-                    />
-                    <RechartsTooltip
-                      cursor={{ fill: 'rgba(255, 255, 255, 0.05)' }}
-                      content={({ active, payload }) => {
-                        if (active && payload && payload.length) {
-                          const data = payload[0].payload;
-                          const matrs = data.matriculasDetalhadas || [];
-                          return (
-                            <div className="bg-[#0b0f19] border border-slate-700 p-3 rounded-xl shadow-2xl text-xs space-y-2 min-w-[260px] max-w-[320px]">
-                              <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
-                                <span className="font-bold text-white">Código NL: {data.codigoNum}</span>
-                                <span className="font-bold text-red-400 font-mono">{data.quantidade} total</span>
-                              </div>
-                              <div className="overflow-x-auto max-h-40 custom-scrollbar border border-slate-800 rounded-lg">
-                                <table className="w-full text-left text-[11px] border-collapse">
-                                  <thead className="bg-[#111827] text-slate-400 font-semibold border-b border-slate-800 uppercase">
-                                    <tr>
-                                      <th className="py-1 px-2.5">Matr</th>
-                                      <th className="py-1 px-2.5 text-right">Ocorrência</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody className="divide-y divide-slate-800/60 font-mono">
-                                    {matrs.map((m: { matr: string; qtd: number }, idx: number) => (
-                                      <tr key={idx} className="hover:bg-slate-800/30">
-                                        <td className="py-1 px-2.5 text-slate-200 font-bold">{m.matr}</td>
-                                        <td className="py-1 px-2.5 text-right text-red-400 font-bold">{m.qtd}</td>
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
-                              </div>
-                            </div>
-                          );
-                        }
-                        return null;
-                      }}
-                    />
-                    <Bar
-                      dataKey="quantidade"
-                      fill="#ef4444"
-                      radius={[6, 6, 0, 0]}
-                      barSize={36}
+              {chartTab === 'geral' ? (
+                chartDataCodigosNl.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={chartDataCodigosNl}
+                      margin={{ top: 25, right: 30, left: 10, bottom: 20 }}
                     >
-                      {chartDataCodigosNl.map((entry, index) => (
-                        <Cell
-                          key={`cell-${index}`}
-                          fill={index === 0 ? '#ef4444' : index < 3 ? '#f97316' : '#0284c7'}
-                        />
-                      ))}
-                      <LabelList
-                        dataKey="quantidade"
-                        position="top"
-                        style={{ fill: '#9ca3af', fontSize: 10, fontWeight: '700' }}
-                        offset={8}
+                      <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" vertical={false} />
+                      <XAxis
+                        dataKey="codigo"
+                        stroke="#6b7280"
+                        tickLine={false}
+                        tick={{ fill: '#9ca3af', fontSize: 11, fontWeight: '600' }}
+                        dy={10}
                       />
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
+                      <YAxis
+                        stroke="#6b7280"
+                        tickLine={false}
+                        tick={{ fill: '#9ca3af', fontSize: 11 }}
+                      />
+                      <RechartsTooltip
+                        cursor={{ fill: 'rgba(255, 255, 255, 0.05)' }}
+                        content={({ active, payload }) => {
+                          if (active && payload && payload.length) {
+                            const data = payload[0].payload;
+                            const matrs = data.matriculasDetalhadas || [];
+                            return (
+                              <div className="bg-[#0b0f19] border border-slate-700 p-3 rounded-xl shadow-2xl text-xs space-y-2 min-w-[260px] max-w-[320px]">
+                                <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
+                                  <span className="font-bold text-white">Código NL: {data.codigoNum}</span>
+                                  <span className="font-bold text-red-400 font-mono">{data.quantidade} total</span>
+                                </div>
+                                <div className="overflow-x-auto max-h-40 custom-scrollbar border border-slate-800 rounded-lg">
+                                  <table className="w-full text-left text-[11px] border-collapse">
+                                    <thead className="bg-[#111827] text-slate-400 font-semibold border-b border-slate-800 uppercase">
+                                      <tr>
+                                        <th className="py-1 px-2.5">Matr</th>
+                                        <th className="py-1 px-2.5 text-right">Ocorrência</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-800/60 font-mono">
+                                      {matrs.map((m: { matr: string; qtd: number }, idx: number) => (
+                                        <tr key={idx} className="hover:bg-slate-800/30">
+                                          <td className="py-1 px-2.5 text-slate-200 font-bold">{m.matr}</td>
+                                          <td className="py-1 px-2.5 text-right text-red-400 font-bold">{m.qtd}</td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            );
+                          }
+                          return null;
+                        }}
+                      />
+                      <Bar
+                        dataKey="quantidade"
+                        fill="#ef4444"
+                        radius={[6, 6, 0, 0]}
+                        barSize={36}
+                      >
+                        {chartDataCodigosNl.map((entry, index) => (
+                          <Cell
+                            key={`cell-${index}`}
+                            fill={index === 0 ? '#ef4444' : index < 3 ? '#f97316' : '#0284c7'}
+                          />
+                        ))}
+                        <LabelList
+                          dataKey="quantidade"
+                          position="top"
+                          style={{ fill: '#9ca3af', fontSize: 10, fontWeight: '700' }}
+                          offset={8}
+                        />
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-full flex items-center justify-center text-slate-500 text-xs">
+                    Nenhum código de impedimento encontrado para os filtros selecionados.
+                  </div>
+                )
               ) : (
-                <div className="h-full flex items-center justify-center text-slate-500 text-xs">
-                  Nenhum código de impedimento encontrado para os filtros selecionados.
-                </div>
+                chartDataImpedimentosPorTipo.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={chartDataImpedimentosPorTipo}
+                      margin={{ top: 25, right: 30, left: 10, bottom: 20 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" vertical={false} />
+                      <XAxis
+                        dataKey="name"
+                        stroke="#6b7280"
+                        tickLine={false}
+                        tick={{ fill: '#9ca3af', fontSize: 11, fontWeight: '600' }}
+                        dy={10}
+                      />
+                      <YAxis
+                        stroke="#6b7280"
+                        tickLine={false}
+                        tick={{ fill: '#9ca3af', fontSize: 11 }}
+                      />
+                      <RechartsTooltip
+                        cursor={{ fill: 'rgba(255, 255, 255, 0.05)' }}
+                        content={({ active, payload }) => {
+                          if (active && payload && payload.length) {
+                            const data = payload[0].payload;
+                            const matrs = data.matriculasDetalhadas || [];
+                            return (
+                              <div className="bg-[#0b0f19] border border-slate-700 p-3 rounded-xl shadow-2xl text-xs space-y-2 min-w-[260px] max-w-[320px]">
+                                <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
+                                  <span className="font-bold text-white">Tipo: {data.tipo}</span>
+                                  <span className="font-bold text-red-400 font-mono">{data.quantidade} total</span>
+                                </div>
+                                <div className="overflow-x-auto max-h-40 custom-scrollbar border border-slate-800 rounded-lg">
+                                  <table className="w-full text-left text-[11px] border-collapse">
+                                    <thead className="bg-[#111827] text-slate-400 font-semibold border-b border-slate-800 uppercase">
+                                      <tr>
+                                        <th className="py-1 px-2.5">Matr</th>
+                                        <th className="py-1 px-2.5 text-right">Ocorrência</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-800/60 font-mono">
+                                      {matrs.map((m: { matr: string; qtd: number }, idx: number) => (
+                                        <tr key={idx} className="hover:bg-slate-800/30">
+                                          <td className="py-1 px-2.5 text-slate-200 font-bold">{m.matr}</td>
+                                          <td className="py-1 px-2.5 text-right text-red-400 font-bold">{m.qtd}</td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            );
+                          }
+                          return null;
+                        }}
+                      />
+                      <Bar
+                        dataKey="quantidade"
+                        fill="#0284c7"
+                        radius={[6, 6, 0, 0]}
+                        barSize={48}
+                      >
+                        {chartDataImpedimentosPorTipo.map((entry, index) => (
+                          <Cell
+                            key={`cell-tipo-${index}`}
+                            fill={index === 0 ? '#ef4444' : index === 1 ? '#f97316' : '#0284c7'}
+                          />
+                        ))}
+                        <LabelList
+                          dataKey="quantidade"
+                          position="top"
+                          style={{ fill: '#9ca3af', fontSize: 10, fontWeight: '700' }}
+                          offset={8}
+                        />
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-full flex items-center justify-center text-slate-500 text-xs">
+                    Nenhum impedimento por tipo encontrado.
+                  </div>
+                )
               )}
             </div>
           </div>
@@ -813,7 +985,7 @@ export const ControleLeiturista: React.FC = () => {
                   }`}
                 >
                   <Users className="w-3.5 h-3.5" />
-                  Relação por Matrícula ({groupedData.length})
+                  Relação por Matrícula ({filteredGroupedData.length})
                 </button>
                 <button
                   type="button"
@@ -850,6 +1022,33 @@ export const ControleLeiturista: React.FC = () => {
             {/* ABA 1: RELAÇÃO POR MATRÍCULA */}
             {activeTableTab === 'matricula' && (
               <>
+                {/* FILTRO COM BASE NOS VALORES DA COLUNA MATR PRESENTES NA TABELA */}
+                <div className="p-3 bg-[#0d1322] border-b border-slate-800 flex flex-wrap items-center justify-between gap-3 print:hidden">
+                  <div className="flex items-center gap-2.5">
+                    <label className="text-[11px] font-semibold text-slate-300 uppercase tracking-wider">
+                      Filtrar Matrícula:
+                    </label>
+                    <select
+                      value={filtroMatrTabela}
+                      onChange={(e) => {
+                        setFiltroMatrTabela(e.target.value);
+                        setPageMatr(1);
+                      }}
+                      className="px-3 py-1.5 bg-[#0b0f19] border border-slate-700 rounded-lg text-xs text-white focus:outline-none focus:border-blue-500 font-mono font-bold"
+                    >
+                      <option value="">Todas as Matrículas ({opcoesMatrTabela.length})</option>
+                      {opcoesMatrTabela.map((m) => (
+                        <option key={m} value={m}>
+                          Matrícula {m}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <span className="text-[11px] text-slate-400 font-mono">
+                    Mostrando <strong className="text-white">{filteredGroupedData.length}</strong> de {groupedData.length} grupos
+                  </span>
+                </div>
+
                 <div className="overflow-x-auto custom-scrollbar">
                   <table className="w-full text-left text-xs border-collapse">
                     <thead className="bg-[#0b0f19] text-slate-400 uppercase tracking-wider font-semibold border-b border-slate-800">
@@ -857,7 +1056,6 @@ export const ControleLeiturista: React.FC = () => {
                         <th className="py-3 px-3.5 whitespace-nowrap">ANO</th>
                         <th className="py-3 px-3.5 whitespace-nowrap">MES</th>
                         <th className="py-3 px-3.5 whitespace-nowrap">RAZAO</th>
-                        <th className="py-3 px-3.5 whitespace-nowrap">UL</th>
                         <th className="py-3 px-3.5 whitespace-nowrap">MATR</th>
                         <th className="py-3 px-3.5 whitespace-nowrap text-right">LEIT. URB</th>
                         <th className="py-3 px-3.5 whitespace-nowrap text-right">LEIT. POVOADO</th>
@@ -873,8 +1071,7 @@ export const ControleLeiturista: React.FC = () => {
                           <td className="py-2.5 px-3.5 text-slate-300">{row.ano}</td>
                           <td className="py-2.5 px-3.5 text-slate-200 font-sans font-medium">{row.mes}</td>
                           <td className="py-2.5 px-3.5 text-white font-bold">{row.razao}</td>
-                          <td className="py-2.5 px-3.5 text-cyan-400 font-bold">{row.ul}</td>
-                          <td className="py-2.5 px-3.5 text-slate-300 font-bold">{row.matr}</td>
+                          <td className="py-2.5 px-3.5 text-cyan-300 font-bold">{row.matr}</td>
                           <td className="py-2.5 px-3.5 text-right text-slate-300">{row.leit_urb}</td>
                           <td className="py-2.5 px-3.5 text-right text-slate-300">{row.leit_povoado}</td>
                           <td className="py-2.5 px-3.5 text-right text-slate-300">{row.leit_rural}</td>
@@ -891,7 +1088,7 @@ export const ControleLeiturista: React.FC = () => {
                       ))}
                       {paginatedMatrData.length === 0 && (
                         <tr>
-                          <td colSpan={11} className="py-8 text-center text-slate-500 font-sans">
+                          <td colSpan={10} className="py-8 text-center text-slate-500 font-sans">
                             Nenhum registro encontrado para os filtros selecionados.
                           </td>
                         </tr>
@@ -903,7 +1100,7 @@ export const ControleLeiturista: React.FC = () => {
                 {/* Paginação de 20 registros */}
                 <div className="p-4 bg-[#0b0f19] border-t border-slate-800 flex items-center justify-between text-xs text-slate-400 print:hidden">
                   <span>
-                    Página <strong className="text-white">{pageMatr}</strong> de <strong className="text-white">{totalPagesMatr}</strong> (Total: {groupedData.length} registros)
+                    Página <strong className="text-white">{pageMatr}</strong> de <strong className="text-white">{totalPagesMatr}</strong> (Total: {filteredGroupedData.length} registros)
                   </span>
                   <div className="flex items-center gap-1.5">
                     <button
