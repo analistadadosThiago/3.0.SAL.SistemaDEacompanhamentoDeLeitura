@@ -56,11 +56,10 @@ export const ControleProducao: React.FC = () => {
     });
   }, [records, filtroAno, filtroCiclo, filtroMatr]);
 
-  // Agrupamento e somatório por MATR (RAZÃO removida)
+  // Agrupamento e somatório a partir do CICLO e da MATR
   const groupedData = useMemo(() => {
     const map = new Map<string, {
       ano: number;
-      mes: string;
       ciclo: string;
       matr: string;
       leit_urb: number;
@@ -71,15 +70,13 @@ export const ControleProducao: React.FC = () => {
 
     filteredRecords.forEach((r) => {
       const ano = r.Ano || 2026;
-      const mes = r.Mes || '';
       const ciclo = r.ciclo || 'PADRAO';
       const matr = String(r.matr || 'SEM_MATR').trim();
-      const key = `${ano}_${mes}_${ciclo}_${matr}`;
+      const key = `${ano}_${ciclo}_${matr}`;
 
       if (!map.has(key)) {
         map.set(key, {
           ano,
-          mes,
           ciclo,
           matr,
           leit_urb: 0,
@@ -110,20 +107,26 @@ export const ControleProducao: React.FC = () => {
       const leit_total = item.leit_urb + item.leit_povoado + item.leit_rural;
       const indicador = leit_total > 0 ? (item.impedimentos / leit_total) * 100 : 0;
 
-      // Regras de Pagamento:
-      // LEITURAS A PAGAR: Deve ser o somatório de LEIT. URB acima de 8000, subtraindo o valor que está em IMPEDIMENTO.
-      // (Exemplo: se tiver 9000 leituras em LEIT. URB, aqui deve constar 1000, mas descontando os impedimentos).
-      // Além disso, para as matrículas 5JL, 5IL e 4NI, traga esse somatório e adicione também o que tiver em Leit. Rural.
-      const excessoUrb = Math.max(0, item.leit_urb - 8000);
-      const isSpecialMatr = SPECIAL_MATRICULAS.has(item.matr.toUpperCase());
-      const baseProducao = isSpecialMatr ? (excessoUrb + item.leit_rural) : excessoUrb;
-      const leiturasAPagar = Math.max(0, baseProducao - item.impedimentos);
+      // 2. Regra da coluna "LEITURAS A PAGAR":
+      //    - Primeiro, faça o somatório de LEIT. URB + LEIT. POVOADO para cada MATR.
+      //    - Se o resultado desse somatório for MAIOR que 8000, subtraia 8000 desse valor. (Exemplo: se a soma der 9500, o valor em LEITURAS A PAGAR será 1500).
+      //    - Se o resultado do somatório for MENOR ou IGUAL a 8000, o valor em LEITURAS A PAGAR deve ser 0.
+      const somaUrbPov = item.leit_urb + item.leit_povoado;
+      const leiturasAPagar = somaUrbPov > 8000 ? (somaUrbPov - 8000) : 0;
 
-      // PREMIAÇÃO: Deve trazer o valor de R$ 100,00 apenas para os que tiverem o INDICADOR abaixo de 0,50%.
-      // (Exemplo: se o INDICADOR for 0,51% ou mais, escreva "N-OK"; se for igual ou inferior a 0,50%, escreva "R$ 100,00").
+      // PREMIAÇÃO: Se o INDICADOR for menor ou igual a 0,50%, é "R$ 100,00". Senão "N-OK".
       const isPremiado = indicador <= 0.50;
       const premiacao = isPremiado ? 'R$ 100,00' : 'N-OK';
-      const valorTotal = isPremiado ? 'R$ 100,00' : 'R$ 0,00';
+      const valorPremiacao = isPremiado ? 100.00 : 0.00;
+
+      // 3. Regra da coluna "VALOR TOTAL":
+      //    - Caso 1 (Quando houver Leituras a Pagar): Multiplique o valor da coluna LEITURAS A PAGAR por R$ 0,20 e some com o valor que estiver na coluna PREMIAÇÃO.
+      //    - Caso 2 (Quando houver dados em Leit. Rural): Pegue o valor da coluna "Leit. Rural" e multiplique por R$ 1,50. A esse resultado, some o valor da coluna PREMIAÇÃO.
+      //    - Importante: Se a MATR tiver valores tanto em LEITURAS A PAGAR quanto em Leit. Rural, o cálculo deve englobar os dois: (Leituras a Pagar * 0,20) + (Leit. Rural * 1,50) + PREMIAÇÃO.
+      const valorLeiturasAPagar = leiturasAPagar * 0.20;
+      const valorLeitRural = item.leit_rural * 1.50;
+      const valorCalculado = valorLeiturasAPagar + valorLeitRural + valorPremiacao;
+      const valorTotal = `R$ ${valorCalculado.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
       return {
         ...item,
@@ -131,9 +134,10 @@ export const ControleProducao: React.FC = () => {
         indicador,
         leiturasAPagar,
         premiacao,
+        valorCalculado,
         valorTotal,
       };
-    }).sort((a, b) => b.impedimentos - a.impedimentos); // Ordenação pela coluna IMPEDIMENTOS de forma decrescente
+    }).sort((a, b) => b.indicador - a.indicador); // A ordenação da tabela deve ser sempre do maior valor de INDICADOR para o menor valor de INDICADOR
   }, [filteredRecords]);
 
   // Cards de resumo
@@ -232,12 +236,12 @@ export const ControleProducao: React.FC = () => {
 
     // Sheet 1: Quantidade de Leitura
     const headersQtd = [
-      'ANO', 'MÊS', 'CICLO', 'MATR',
+      'ANO', 'CICLO', 'MATR',
       'LEIT. URB', 'LEIT. POVOADO', 'LEIT. RURAL', 'LEIT. TOTAL',
       'IMPEDIMENTOS', 'INDICADOR (%)'
     ];
     const dataQtd = groupedData.map((r) => [
-      r.ano, r.mes, r.ciclo, r.matr,
+      r.ano, r.ciclo, r.matr,
       r.leit_urb, r.leit_povoado, r.leit_rural, r.leit_total,
       r.impedimentos, `${r.indicador.toFixed(2).replace('.', ',')}%`
     ]);
@@ -245,11 +249,11 @@ export const ControleProducao: React.FC = () => {
 
     // Sheet 2: Relação de Pagamentos
     const headersPag = [
-      'ANO', 'MÊS', 'CICLO', 'MATR', 'IMPEDIMENTO',
+      'ANO', 'CICLO', 'MATR', 'LEIT. RURAL',
       'LEITURAS A PAGAR', 'PREMIAÇÃO', 'VALOR TOTAL'
     ];
     const dataPag = groupedData.map((r) => [
-      r.ano, r.mes, r.ciclo, r.matr, r.impedimentos,
+      r.ano, r.ciclo, r.matr, r.leit_rural,
       r.leiturasAPagar, r.premiacao, r.valorTotal
     ]);
     const wsPag = XLSX.utils.aoa_to_sheet([...titleRows, headersPag, ...dataPag]);
@@ -273,18 +277,18 @@ export const ControleProducao: React.FC = () => {
       tables: [
         {
           title: 'Relação de Quantidade de Leitura',
-          headers: ['ANO', 'MÊS', 'CICLO', 'MATR', 'URB', 'POV', 'RUR', 'TOTAL', 'IMP', 'INDICADOR'],
+          headers: ['ANO', 'CICLO', 'MATR', 'URB', 'POV', 'RUR', 'TOTAL', 'IMP', 'INDICADOR'],
           data: groupedData.slice(0, 150).map((r) => [
-            r.ano, r.mes, r.ciclo, r.matr,
+            r.ano, r.ciclo, r.matr,
             r.leit_urb, r.leit_povoado, r.leit_rural, r.leit_total,
             r.impedimentos, `${r.indicador.toFixed(2).replace('.', ',')}%`
           ]),
         },
         {
           title: 'Relação de Pagamentos',
-          headers: ['ANO', 'MÊS', 'CICLO', 'MATR', 'IMPEDIMENTO', 'LEITURAS A PAGAR', 'PREMIAÇÃO', 'VALOR TOTAL'],
+          headers: ['ANO', 'CICLO', 'MATR', 'LEIT. RURAL', 'LEITURAS A PAGAR', 'PREMIAÇÃO', 'VALOR TOTAL'],
           data: groupedData.slice(0, 150).map((r) => [
-            r.ano, r.mes, r.ciclo, r.matr, r.impedimentos,
+            r.ano, r.ciclo, r.matr, r.leit_rural,
             r.leiturasAPagar, r.premiacao, r.valorTotal
           ]),
         },
@@ -646,7 +650,6 @@ export const ControleProducao: React.FC = () => {
                     <thead className="bg-[#0b0f19] text-slate-400 uppercase tracking-wider font-semibold border-b border-slate-800">
                       <tr>
                         <th className="py-3 px-3.5 whitespace-nowrap">ANO</th>
-                        <th className="py-3 px-3.5 whitespace-nowrap">MÊS</th>
                         <th className="py-3 px-3.5 whitespace-nowrap">CICLO</th>
                         <th className="py-3 px-3.5 whitespace-nowrap">MATR</th>
                         <th className="py-3 px-3.5 whitespace-nowrap text-right">LEIT. URB</th>
@@ -661,7 +664,6 @@ export const ControleProducao: React.FC = () => {
                       {paginatedQtd.map((row, idx) => (
                         <tr key={idx} className="hover:bg-slate-800/40 transition-colors">
                           <td className="py-2.5 px-3.5 text-slate-300">{row.ano}</td>
-                          <td className="py-2.5 px-3.5 text-slate-200 font-sans font-medium">{row.mes}</td>
                           <td className="py-2.5 px-3.5 text-cyan-300 font-bold">{row.ciclo}</td>
                           <td className="py-2.5 px-3.5 text-white font-bold">{row.matr}</td>
                           <td className="py-2.5 px-3.5 text-right text-slate-300">{row.leit_urb.toLocaleString('pt-BR')}</td>
@@ -680,7 +682,7 @@ export const ControleProducao: React.FC = () => {
                       ))}
                       {paginatedQtd.length === 0 && (
                         <tr>
-                          <td colSpan={10} className="py-8 text-center text-slate-500 font-sans">
+                          <td colSpan={9} className="py-8 text-center text-slate-500 font-sans">
                             Nenhum registro encontrado para os filtros selecionados.
                           </td>
                         </tr>
@@ -722,10 +724,9 @@ export const ControleProducao: React.FC = () => {
                     <thead className="bg-[#0b0f19] text-slate-400 uppercase tracking-wider font-semibold border-b border-slate-800">
                       <tr>
                         <th className="py-3 px-3.5 whitespace-nowrap">ANO</th>
-                        <th className="py-3 px-3.5 whitespace-nowrap">MÊS</th>
                         <th className="py-3 px-3.5 whitespace-nowrap">CICLO</th>
                         <th className="py-3 px-3.5 whitespace-nowrap">MATR</th>
-                        <th className="py-3 px-3.5 whitespace-nowrap text-right">IMPEDIMENTO</th>
+                        <th className="py-3 px-3.5 whitespace-nowrap text-right">Leit. Rural</th>
                         <th className="py-3 px-3.5 whitespace-nowrap text-right">LEITURAS A PAGAR</th>
                         <th className="py-3 px-3.5 whitespace-nowrap text-center">PREMIAÇÃO</th>
                         <th className="py-3 px-3.5 whitespace-nowrap text-right">VALOR TOTAL</th>
@@ -735,10 +736,9 @@ export const ControleProducao: React.FC = () => {
                       {paginatedPag.map((row, idx) => (
                         <tr key={idx} className="hover:bg-slate-800/40 transition-colors">
                           <td className="py-2.5 px-3.5 text-slate-300">{row.ano}</td>
-                          <td className="py-2.5 px-3.5 text-slate-200 font-sans font-medium">{row.mes}</td>
                           <td className="py-2.5 px-3.5 text-cyan-300 font-bold">{row.ciclo}</td>
                           <td className="py-2.5 px-3.5 text-white font-bold">{row.matr}</td>
-                          <td className="py-2.5 px-3.5 text-right font-bold text-red-400">{row.impedimentos}</td>
+                          <td className="py-2.5 px-3.5 text-right text-slate-300">{row.leit_rural.toLocaleString('pt-BR')}</td>
                           <td className="py-2.5 px-3.5 text-right text-cyan-400 font-bold">
                             {row.leiturasAPagar.toLocaleString('pt-BR')}
                           </td>
@@ -758,7 +758,7 @@ export const ControleProducao: React.FC = () => {
                       ))}
                       {paginatedPag.length === 0 && (
                         <tr>
-                          <td colSpan={8} className="py-8 text-center text-slate-500 font-sans">
+                          <td colSpan={7} className="py-8 text-center text-slate-500 font-sans">
                             Nenhum registro encontrado para os filtros selecionados.
                           </td>
                         </tr>
