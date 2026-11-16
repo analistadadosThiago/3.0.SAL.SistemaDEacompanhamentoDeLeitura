@@ -73,18 +73,21 @@ export const ControleEvidencias: React.FC = () => {
   const totaisGerais = useMemo(() => {
     let solicitadas = 0;
     let realizadas = 0;
+    let nao_realizadas = 0;
 
     filteredBase.forEach((r) => {
-      const isSolicitada = (Number(r.digitacao) || 1) >= 2;
-      if (isSolicitada) {
-        solicitadas += 1;
-        if (String(r.foto || '').trim().toUpperCase() === 'OK') {
-          realizadas += 1;
-        }
+      const isSolicitada = Number(r.digitacao) >= 2;
+      if (!isSolicitada) return;
+
+      solicitadas += 1;
+      const fotoVal = String(r.foto || '').trim().toUpperCase();
+      if (fotoVal === 'OK') {
+        realizadas += 1;
+      } else if (fotoVal === 'N-OK') {
+        nao_realizadas += 1;
       }
     });
 
-    const nao_realizadas = Math.max(0, solicitadas - realizadas);
     const indicador = solicitadas > 0 ? (realizadas / solicitadas) * 100 : 0;
 
     return { solicitadas, realizadas, nao_realizadas, indicador };
@@ -98,13 +101,14 @@ export const ControleEvidencias: React.FC = () => {
       razao: string;
       solicitadas: number;
       realizadas: number;
+      nao_realizadas: number;
       urbano: number;
       povoado: number;
       rural: number;
     }>();
 
     filteredBase.forEach((r) => {
-      const isSolicitada = (Number(r.digitacao) || 1) >= 2;
+      const isSolicitada = Number(r.digitacao) >= 2;
       if (!isSolicitada) return;
 
       const rz = String(r.rz || '01').padStart(2, '0');
@@ -115,6 +119,7 @@ export const ControleEvidencias: React.FC = () => {
           razao: rz,
           solicitadas: 0,
           realizadas: 0,
+          nao_realizadas: 0,
           urbano: 0,
           povoado: 0,
           rural: 0,
@@ -123,8 +128,11 @@ export const ControleEvidencias: React.FC = () => {
 
       const item = map.get(rz)!;
       item.solicitadas += 1;
-      if (String(r.foto || '').trim().toUpperCase() === 'OK') {
+      const fotoVal = String(r.foto || '').trim().toUpperCase();
+      if (fotoVal === 'OK') {
         item.realizadas += 1;
+      } else if (fotoVal === 'N-OK') {
+        item.nao_realizadas += 1;
       }
 
       const tipo = (r.tipo || '').toUpperCase();
@@ -135,12 +143,10 @@ export const ControleEvidencias: React.FC = () => {
     });
 
     return Array.from(map.values()).map((item) => {
-      const nao_realizadas = Math.max(0, item.solicitadas - item.realizadas);
       const indicador = item.solicitadas > 0 ? (item.realizadas / item.solicitadas) * 100 : 0;
 
       return {
         ...item,
-        nao_realizadas,
         indicador,
       };
     }).sort((a, b) => b.indicador - a.indicador);
@@ -178,10 +184,11 @@ export const ControleEvidencias: React.FC = () => {
       matr: string;
       solicitadas: number;
       realizadas: number;
+      nao_realizadas: number;
     }>();
 
     filteredBase.forEach((r) => {
-      const isSolicitada = (Number(r.digitacao) || 1) >= 2;
+      const isSolicitada = Number(r.digitacao) >= 2;
       if (!isSolicitada) return;
 
       const matr = String(r.matr || 'SEM_MATR').trim();
@@ -196,23 +203,25 @@ export const ControleEvidencias: React.FC = () => {
           matr,
           solicitadas: 0,
           realizadas: 0,
+          nao_realizadas: 0,
         });
       }
 
       const item = map.get(key)!;
       item.solicitadas += 1;
-      if (String(r.foto || '').trim().toUpperCase() === 'OK') {
+      const fotoVal = String(r.foto || '').trim().toUpperCase();
+      if (fotoVal === 'OK') {
         item.realizadas += 1;
+      } else if (fotoVal === 'N-OK') {
+        item.nao_realizadas += 1;
       }
     });
 
     return Array.from(map.values())
       .map((item) => {
-        const nao_realizadas = Math.max(0, item.solicitadas - item.realizadas);
         const indicador = item.solicitadas > 0 ? (item.realizadas / item.solicitadas) * 100 : 0;
         return {
           ...item,
-          nao_realizadas,
           indicador,
         };
       })
@@ -241,6 +250,7 @@ export const ControleEvidencias: React.FC = () => {
       matr: string;
       solicitadas: number;
       realizadas: number;
+      nao_realizadas: number;
     }>();
 
     records.forEach((r) => {
@@ -251,7 +261,7 @@ export const ControleEvidencias: React.FC = () => {
       const rzUl = Number(r.rz_ul_lv) || 0;
       if (rzUl < ulDeNum || rzUl > ulParaNum) return;
 
-      const isSolicitada = (Number(r.digitacao) || 1) >= 2;
+      const isSolicitada = Number(r.digitacao) >= 2;
       if (!isSolicitada) return;
 
       const matr = String(r.matr || 'SEM_MATR').trim();
@@ -266,23 +276,25 @@ export const ControleEvidencias: React.FC = () => {
           matr,
           solicitadas: 0,
           realizadas: 0,
+          nao_realizadas: 0,
         });
       }
 
       const item = mapAlert.get(key)!;
       item.solicitadas += 1;
-      if (String(r.foto || '').trim().toUpperCase() === 'OK') {
+      const fotoVal = String(r.foto || '').trim().toUpperCase();
+      if (fotoVal === 'OK') {
         item.realizadas += 1;
+      } else if (fotoVal === 'N-OK') {
+        item.nao_realizadas += 1;
       }
     });
 
     const lowEvidenceAlert = Array.from(mapAlert.values())
       .map((item) => {
-        const nao_realizadas = Math.max(0, item.solicitadas - item.realizadas);
         const indicador = item.solicitadas > 0 ? (item.realizadas / item.solicitadas) * 100 : 0;
         return {
           ...item,
-          nao_realizadas,
           indicador,
         };
       })
@@ -334,12 +346,12 @@ export const ControleEvidencias: React.FC = () => {
     }>();
 
     filteredBase.forEach((r) => {
-      const isSolicitada = (Number(r.digitacao) || 1) >= 2;
+      const isSolicitada = Number(r.digitacao) >= 2;
       if (!isSolicitada) return;
 
       const rz = String(r.rz || '01').padStart(2, '0');
       const matr = String(r.matr || 'SEM_MATR').trim();
-      const isOk = String(r.foto || '').trim().toUpperCase() === 'OK';
+      const fotoVal = String(r.foto || '').trim().toUpperCase();
 
       if (!map.has(rz)) {
         map.set(rz, {
@@ -353,10 +365,10 @@ export const ControleEvidencias: React.FC = () => {
       }
 
       const item = map.get(rz)!;
-      if (isOk) {
+      if (fotoVal === 'OK') {
         item.realizadas += 1;
         item.matrRealizadasMap.set(matr, (item.matrRealizadasMap.get(matr) || 0) + 1);
-      } else {
+      } else if (fotoVal === 'N-OK') {
         item.nao_realizadas += 1;
         item.matrNaoRealizadasMap.set(matr, (item.matrNaoRealizadasMap.get(matr) || 0) + 1);
       }

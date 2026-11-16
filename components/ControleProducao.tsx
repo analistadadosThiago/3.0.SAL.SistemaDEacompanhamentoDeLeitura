@@ -64,6 +64,7 @@ export const ControleProducao: React.FC = () => {
       ano: number;
       ciclo: string;
       matr: string;
+      razoesSet: Set<string>;
       leit_urb: number;
       leit_povoado: number;
       leit_rural: number;
@@ -72,7 +73,7 @@ export const ControleProducao: React.FC = () => {
 
     filteredRecords.forEach((r) => {
       const ano = r.Ano || 2026;
-      const ciclo = r.ciclo || 'PADRAO';
+      const ciclo = String(r.ciclo || '').trim() || 'PADRAO';
       const matr = String(r.matr || 'SEM_MATR').trim();
       const key = `${ano}_${ciclo}_${matr}`;
 
@@ -81,6 +82,7 @@ export const ControleProducao: React.FC = () => {
           ano,
           ciclo,
           matr,
+          razoesSet: new Set<string>(),
           leit_urb: 0,
           leit_povoado: 0,
           leit_rural: 0,
@@ -89,15 +91,18 @@ export const ControleProducao: React.FC = () => {
       }
 
       const item = map.get(key)!;
-      const tipo = (r.tipo || '').toUpperCase();
-      if (tipo.includes('URB')) {
+      const rz = String(r.rz ?? '').trim();
+      if (rz && rz !== '0' && rz !== '00') {
+        item.razoesSet.add(rz.padStart(2, '0'));
+      }
+
+      const tipo = String(r.tipo || '').trim().toUpperCase();
+      if (tipo === 'URBANO') {
         item.leit_urb += 1;
-      } else if (tipo.includes('POV')) {
+      } else if (tipo === 'POVOADO') {
         item.leit_povoado += 1;
-      } else if (tipo.includes('RUR')) {
+      } else if (tipo === 'RURAL') {
         item.leit_rural += 1;
-      } else {
-        item.leit_urb += 1;
       }
 
       if (EXTENDED_CODES_SET.has(String(r.nl || '').trim())) {
@@ -110,28 +115,38 @@ export const ControleProducao: React.FC = () => {
       const indicador = leit_total > 0 ? (item.impedimentos / leit_total) * 100 : 0;
 
       // 2. Regra da coluna "LEITURAS A PAGAR":
-      //    - Primeiro, faça o somatório de LEIT. URB + LEIT. POVOADO para cada MATR.
-      //    - Se o resultado desse somatório for MAIOR que 8000, subtraia 8000 desse valor. (Exemplo: se a soma der 9500, o valor em LEITURAS A PAGAR será 1500).
-      //    - Se o resultado do somatório for MENOR ou IGUAL a 8000, o valor em LEITURAS A PAGAR deve ser 0.
+      //    - Soma a quantidade de leituras onde TIPO for igual a "Povoado" e "Urbano".
+      //    - Desse somatório total, subtrai 8000 (mantendo 0 caso não ultrapasse 8000).
       const somaUrbPov = item.leit_urb + item.leit_povoado;
       const leiturasAPagar = somaUrbPov > 8000 ? (somaUrbPov - 8000) : 0;
 
       // PREMIAÇÃO: Se o INDICADOR for menor ou igual a 0,50%, é "R$ 100,00". Senão "N-OK".
       const isPremiado = indicador <= 0.50;
       const premiacao = isPremiado ? 'R$ 100,00' : 'N-OK';
-      const valorPremiacao = isPremiado ? 100.00 : 0.00;
 
-      // 3. Regra da coluna "VALOR TOTAL":
-      //    - Caso 1 (Quando houver Leituras a Pagar): Multiplique o valor da coluna LEITURAS A PAGAR por R$ 0,20 e some com o valor que estiver na coluna PREMIAÇÃO.
-      //    - Caso 2 (Quando houver dados em Leit. Rural): Pegue o valor da coluna "Leit. Rural" e multiplique por R$ 1,50. A esse resultado, some o valor da coluna PREMIAÇÃO.
-      //    - Importante: Se a MATR tiver valores tanto em LEITURAS A PAGAR quanto em Leit. Rural, o cálculo deve englobar os dois: (Leituras a Pagar * 0,20) + (Leit. Rural * 1,50) + PREMIAÇÃO.
-      const valorLeiturasAPagar = leiturasAPagar * 0.20;
-      const valorLeitRural = item.leit_rural * 1.50;
-      const valorCalculado = valorLeiturasAPagar + valorLeitRural + valorPremiacao;
+      // 3. Regra da coluna "VALOR TOTAL" (Cálculo Híbrido):
+      //    - Parte 1: LEITURAS A PAGAR * R$ 0,15
+      //    - Parte 2: LEIT. RURAL * R$ 1,50
+      //    - Soma Parte 1 + Parte 2 + R$ 100,00 (apenas se PREMIAÇÃO for "R$ 100,00")
+      const parte1 = leiturasAPagar * 0.15;
+      const parte2 = item.leit_rural * 1.50;
+      const valorPremiacao = premiacao === 'R$ 100,00' ? 100.00 : 0.00;
+      const valorCalculado = parte1 + parte2 + valorPremiacao;
       const valorTotal = `R$ ${valorCalculado.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+      const razaoResumo = Array.from(item.razoesSet)
+        .sort((a, b) => Number(a) - Number(b))
+        .join(', ') || '—';
+
       return {
-        ...item,
+        ano: item.ano,
+        ciclo: item.ciclo,
+        matr: item.matr,
+        razaoResumo,
+        leit_urb: item.leit_urb,
+        leit_povoado: item.leit_povoado,
+        leit_rural: item.leit_rural,
+        impedimentos: item.impedimentos,
         leit_total,
         indicador,
         leiturasAPagar,
@@ -222,80 +237,259 @@ export const ControleProducao: React.FC = () => {
 
   const totalPagesPag = Math.ceil(groupedData.length / PAGE_SIZE) || 1;
 
-  // Exportar Excel
+  // Exportar Excel (apenas da aba que estiver aberta no momento)
   const exportToExcel = () => {
-    if (groupedData.length === 0) return;
     const now = new Date();
     const dataHoraStr = now.toLocaleString('pt-BR');
+    const dateSlug = now.toISOString().slice(0, 10);
+    const cicloSlug = filtroCiclo ? `_${filtroCiclo.replace(/[^a-zA-Z0-9_-]/g, '_')}` : '';
+
+    if (activeTab === 'orientacoes') {
+      const titleRows = [
+        ['SAL – Sistema de Análise de Leitura'],
+        ['Relatório: 3.3. Controle de Produção – Orientações'],
+        [`Data e Hora do Relatório: ${dataHoraStr}`],
+        [],
+      ];
+      const headers = ['Relatório', 'Regra / Item', 'Descrição'];
+      const rows = [
+        ['Relação de Quantidade de Leitura', 'Intervalo de Razão', 'A divisão/controle deste relatório se dá sempre no intervalo do Razão 09 ao 08 (dentro do ciclo estabelecido).'],
+        ['Relação de Quantidade de Leitura', 'Contabilização', 'São contabilizadas as quantidades de Leituras em Geral e o que é contabilizado como Impedimento (INFM).'],
+        ['Relação de Quantidade de Leitura', 'Indicador', 'Tendo estes dados, é gerado o indicador de impedimentos.'],
+        ['Relação de Pagamentos', 'Leit. Rural', 'É colocada a quantidade de Leitura rural realizada pelo leiturista (TIPO = Rural).'],
+        ['Relação de Pagamentos', 'LEITURAS A PAGAR', 'Soma das leituras "Urbano" e "Povoado", subtraindo 8000 do total.'],
+        ['Relação de Pagamentos', 'PREMIAÇÃO', 'Apto a receber R$ 100,00 quando o Indicador estiver abaixo de 0,50%. Caso contrário, não recebe.'],
+      ];
+      const ws = XLSX.utils.aoa_to_sheet([...titleRows, headers, ...rows]);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Orientacoes');
+      XLSX.writeFile(wb, `SAL_Orientacoes_Controle_Producao_${dateSlug}.xlsx`);
+      return;
+    }
+
+    if (groupedData.length === 0) return;
 
     const titleRows = [
       ['SAL – Sistema de Análise de Leitura'],
-      ['Relatório: 3.3. Controle de Produção'],
+      [`Relatório: 3.3. Controle de Produção – ${activeTab === 'quantidade' ? 'Relação de Quantidade de Leitura' : 'Relação de Pagamentos'}`],
       [`Data e Hora do Relatório: ${dataHoraStr}`],
-      [`Filtros: Ano ${filtroAno || 'Todos'} | Ciclo ${filtroCiclo || 'Todos'} | Matrícula ${filtroMatr || 'Todas'}`],
+      [`Filtros (Base CICLO): Ciclo ${filtroCiclo || 'Todos'} | Ano ${filtroAno || 'Todos'} | Matrícula ${filtroMatr || 'Todas'}`],
       [],
     ];
 
-    // Sheet 1: Quantidade de Leitura
-    const headersQtd = [
-      'ANO', 'CICLO', 'MATR',
-      'LEIT. URB', 'LEIT. POVOADO', 'LEIT. RURAL', 'LEIT. TOTAL',
-      'IMPEDIMENTOS', 'INDICADOR (%)'
-    ];
-    const dataQtd = groupedData.map((r) => [
-      r.ano, r.ciclo, r.matr,
-      r.leit_urb, r.leit_povoado, r.leit_rural, r.leit_total,
-      r.impedimentos, `${r.indicador.toFixed(2).replace('.', ',')}%`
-    ]);
-    const wsQtd = XLSX.utils.aoa_to_sheet([...titleRows, headersQtd, ...dataQtd]);
-
-    // Sheet 2: Relação de Pagamentos
-    const headersPag = [
-      'ANO', 'CICLO', 'MATR', 'LEIT. RURAL',
-      'LEITURAS A PAGAR', 'PREMIAÇÃO', 'VALOR TOTAL'
-    ];
-    const dataPag = groupedData.map((r) => [
-      r.ano, r.ciclo, r.matr, r.leit_rural,
-      r.leiturasAPagar, r.premiacao, r.valorTotal
-    ]);
-    const wsPag = XLSX.utils.aoa_to_sheet([...titleRows, headersPag, ...dataPag]);
-
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, wsQtd, 'Quantidade_de_Leitura');
-    XLSX.utils.book_append_sheet(wb, wsPag, 'Relacao_de_Pagamentos');
-    XLSX.writeFile(wb, `SAL_Controle_Producao_${now.toISOString().slice(0, 10)}.xlsx`);
+
+    if (activeTab === 'quantidade') {
+      const headersQtd = [
+        'ANO', 'CICLO', 'MATR',
+        'LEIT. URB', 'LEIT. POVOADO', 'LEIT. RURAL', 'LEIT. TOTAL',
+        'IMPEDIMENTOS', 'INDICADOR (%)'
+      ];
+      const dataQtd = groupedData.map((r) => [
+        r.ano, r.ciclo, r.matr,
+        r.leit_urb, r.leit_povoado, r.leit_rural, r.leit_total,
+        r.impedimentos, `${r.indicador.toFixed(2).replace('.', ',')}%`
+      ]);
+      const wsQtd = XLSX.utils.aoa_to_sheet([...titleRows, headersQtd, ...dataQtd]);
+      XLSX.utils.book_append_sheet(wb, wsQtd, 'Quantidade_de_Leitura');
+      XLSX.writeFile(wb, `SAL_Quantidade_Leitura${cicloSlug}_${dateSlug}.xlsx`);
+    } else if (activeTab === 'pagamentos') {
+      const headersPag = [
+        'ANO', 'CICLO', 'MATR', 'LEIT. RURAL',
+        'LEITURAS A PAGAR', 'PREMIAÇÃO', 'VALOR TOTAL'
+      ];
+      const dataPag = groupedData.map((r) => [
+        r.ano, r.ciclo, r.matr, r.leit_rural,
+        r.leiturasAPagar, r.premiacao, r.valorTotal
+      ]);
+      const wsPag = XLSX.utils.aoa_to_sheet([...titleRows, headersPag, ...dataPag]);
+      XLSX.utils.book_append_sheet(wb, wsPag, 'Relacao_de_Pagamentos');
+      XLSX.writeFile(wb, `SAL_Relacao_Pagamentos${cicloSlug}_${dateSlug}.xlsx`);
+    }
   };
 
-  // Exportar PDF
+  // Novo Botão "Exportar Dados" (na Relação de Pagamentos) agrupado e separado por RAZÃO
+  const exportDadosPagamentosExcel = () => {
+    if (filteredRecords.length === 0) return;
+    const now = new Date();
+    const dateSlug = now.toISOString().slice(0, 10);
+    const cicloSlug = filtroCiclo ? `_${filtroCiclo.replace(/[^a-zA-Z0-9_-]/g, '_')}` : '';
+
+    const razaoMap = new Map<string, {
+      ano: number;
+      ciclo: string;
+      matr: string;
+      razao: string;
+      leit_urb: number;
+      leit_povoado: number;
+      leit_rural: number;
+      impedimentos: number;
+    }>();
+
+    filteredRecords.forEach((r) => {
+      const ano = r.Ano || 2026;
+      const ciclo = String(r.ciclo || '').trim() || 'PADRAO';
+      const matr = String(r.matr || 'SEM_MATR').trim();
+      const rzRaw = String(r.rz ?? '').trim();
+      const razao = rzRaw ? rzRaw.padStart(2, '0') : '—';
+      const key = `${ano}_${ciclo}_${matr}_${razao}`;
+
+      if (!razaoMap.has(key)) {
+        razaoMap.set(key, {
+          ano,
+          ciclo,
+          matr,
+          razao,
+          leit_urb: 0,
+          leit_povoado: 0,
+          leit_rural: 0,
+          impedimentos: 0,
+        });
+      }
+
+      const item = razaoMap.get(key)!;
+      const tipo = String(r.tipo || '').trim().toUpperCase();
+      if (tipo === 'URBANO') {
+        item.leit_urb += 1;
+      } else if (tipo === 'POVOADO') {
+        item.leit_povoado += 1;
+      } else if (tipo === 'RURAL') {
+        item.leit_rural += 1;
+      }
+
+      if (EXTENDED_CODES_SET.has(String(r.nl || '').trim())) {
+        item.impedimentos += 1;
+      }
+    });
+
+    const groupedByRazao = Array.from(razaoMap.values())
+      .map((item) => {
+        const leit_total = item.leit_urb + item.leit_povoado + item.leit_rural;
+        const indicador = leit_total > 0 ? (item.impedimentos / leit_total) * 100 : 0;
+
+        const somaUrbPov = item.leit_urb + item.leit_povoado;
+        const leiturasAPagar = somaUrbPov > 8000 ? (somaUrbPov - 8000) : 0;
+
+        const isPremiado = indicador <= 0.50;
+        const premiacao = isPremiado ? 'R$ 100,00' : 'N-OK';
+
+        const parte1 = leiturasAPagar * 0.15;
+        const parte2 = item.leit_rural * 1.50;
+        const valorPremiacao = premiacao === 'R$ 100,00' ? 100.00 : 0.00;
+        const valorCalculado = parte1 + parte2 + valorPremiacao;
+        const valorTotal = `R$ ${valorCalculado.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+        return {
+          ...item,
+          indicador,
+          leiturasAPagar,
+          valorTotal,
+        };
+      })
+      .sort((a, b) => {
+        const cmpCiclo = a.ciclo.localeCompare(b.ciclo, undefined, { numeric: true });
+        if (cmpCiclo !== 0) return cmpCiclo;
+        const cmpMatr = a.matr.localeCompare(b.matr, undefined, { numeric: true });
+        if (cmpMatr !== 0) return cmpMatr;
+        return a.razao.localeCompare(b.razao, undefined, { numeric: true });
+      });
+
+    if (groupedByRazao.length === 0) return;
+
+    const headers = [
+      'CICLO',
+      'MATR',
+      'RAZÃO',
+      'Leituras Urbanos',
+      'Leituras Povoado',
+      'Leituras rural',
+      'Impedimentos',
+      'INFM',
+      'LEITURAS A PAGAR',
+      'VALOR TOTAL',
+    ];
+
+    const dataRows = groupedByRazao.map((r) => [
+      r.ciclo,
+      r.matr,
+      r.razao,
+      r.leit_urb,
+      r.leit_povoado,
+      r.leit_rural,
+      r.impedimentos,
+      `${r.indicador.toFixed(2).replace('.', ',')}%`,
+      r.leiturasAPagar,
+      r.valorTotal,
+    ]);
+
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
+    ws['!cols'] = [
+      { wch: 16 },
+      { wch: 12 },
+      { wch: 12 },
+      { wch: 18 },
+      { wch: 18 },
+      { wch: 16 },
+      { wch: 15 },
+      { wch: 12 },
+      { wch: 18 },
+      { wch: 16 },
+    ];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Dados_Pagamentos_Razao');
+    XLSX.writeFile(wb, `SAL_Exportar_Dados_Pagamentos${cicloSlug}_${dateSlug}.xlsx`);
+  };
+
+  // Exportar PDF (apenas da aba que estiver aberta no momento)
   const exportToPDF = () => {
+    if (activeTab === 'orientacoes') {
+      exportOrientacoesToPDF();
+      return;
+    }
     if (groupedData.length === 0) return;
 
-    exportPdfReport({
-      title: 'Controle de Produção e Remuneração',
-      subtitle: `Ano: ${filtroAno || 'Todos'} | Ciclo: ${filtroCiclo || 'Todos'} | Matrícula: ${filtroMatr || 'Todas'}`,
-      filters: `Total de registros consolidados: ${groupedData.length}`,
-      filename: `SAL_Controle_Producao_${new Date().toISOString().slice(0, 10)}`,
-      orientation: 'landscape',
-      tables: [
-        {
-          title: 'Relação de Quantidade de Leitura',
-          headers: ['ANO', 'CICLO', 'MATR', 'URB', 'POV', 'RUR', 'TOTAL', 'IMP', 'INDICADOR'],
-          data: groupedData.slice(0, 150).map((r) => [
-            r.ano, r.ciclo, r.matr,
-            r.leit_urb, r.leit_povoado, r.leit_rural, r.leit_total,
-            r.impedimentos, `${r.indicador.toFixed(2).replace('.', ',')}%`
-          ]),
-        },
-        {
-          title: 'Relação de Pagamentos',
-          headers: ['ANO', 'CICLO', 'MATR', 'LEIT. RURAL', 'LEITURAS A PAGAR', 'PREMIAÇÃO', 'VALOR TOTAL'],
-          data: groupedData.slice(0, 150).map((r) => [
-            r.ano, r.ciclo, r.matr, r.leit_rural,
-            r.leiturasAPagar, r.premiacao, r.valorTotal
-          ]),
-        },
-      ],
-    });
+    const dateSlug = new Date().toISOString().slice(0, 10);
+    const cicloSlug = filtroCiclo ? `_${filtroCiclo.replace(/[^a-zA-Z0-9_-]/g, '_')}` : '';
+
+    if (activeTab === 'quantidade') {
+      exportPdfReport({
+        title: 'Controle de Produção – Relação de Quantidade de Leitura',
+        subtitle: `Ciclo: ${filtroCiclo || 'Todos'} | Ano: ${filtroAno || 'Todos'} | Matrícula: ${filtroMatr || 'Todas'}`,
+        filters: `Base de agrupamento: CICLO | Total de registros: ${groupedData.length}`,
+        filename: `SAL_Quantidade_Leitura${cicloSlug}_${dateSlug}`,
+        orientation: 'landscape',
+        tables: [
+          {
+            title: 'Relação de Quantidade de Leitura',
+            headers: ['ANO', 'CICLO', 'MATR', 'LEIT. URB', 'LEIT. POVOADO', 'LEIT. RURAL', 'LEIT. TOTAL', 'IMPEDIMENTOS', 'INDICADOR'],
+            data: groupedData.map((r) => [
+              r.ano, r.ciclo, r.matr,
+              r.leit_urb, r.leit_povoado, r.leit_rural, r.leit_total,
+              r.impedimentos, `${r.indicador.toFixed(2).replace('.', ',')}%`
+            ]),
+          },
+        ],
+      });
+    } else if (activeTab === 'pagamentos') {
+      exportPdfReport({
+        title: 'Controle de Produção – Relação de Pagamentos',
+        subtitle: `Ciclo: ${filtroCiclo || 'Todos'} | Ano: ${filtroAno || 'Todos'} | Matrícula: ${filtroMatr || 'Todas'}`,
+        filters: `Base de agrupamento: CICLO | Total de registros: ${groupedData.length}`,
+        filename: `SAL_Relacao_Pagamentos${cicloSlug}_${dateSlug}`,
+        orientation: 'landscape',
+        tables: [
+          {
+            title: 'Relação de Pagamentos',
+            headers: ['ANO', 'CICLO', 'MATR', 'LEIT. RURAL', 'LEITURAS A PAGAR', 'PREMIAÇÃO', 'VALOR TOTAL'],
+            data: groupedData.map((r) => [
+              r.ano, r.ciclo, r.matr, r.leit_rural,
+              r.leiturasAPagar, r.premiacao, r.valorTotal
+            ]),
+          },
+        ],
+      });
+    }
   };
 
   // Exportar Orientações em PDF
@@ -782,17 +976,35 @@ export const ControleProducao: React.FC = () => {
                 </button>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 {activeTab === 'orientacoes' ? (
-                  <button
-                    onClick={exportOrientacoesToPDF}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600/20 text-red-400 border border-red-600/30 hover:bg-red-600/30 rounded-lg text-xs font-semibold transition-all cursor-pointer shadow-sm"
-                  >
-                    <FileText className="w-3.5 h-3.5" />
-                    Exportar PDF
-                  </button>
+                  <>
+                    <button
+                      onClick={exportToExcel}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600/20 text-emerald-400 border border-emerald-600/30 hover:bg-emerald-600/30 rounded-lg text-xs font-semibold transition-all cursor-pointer"
+                    >
+                      <FileSpreadsheet className="w-3.5 h-3.5" />
+                      Excel
+                    </button>
+                    <button
+                      onClick={exportOrientacoesToPDF}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600/20 text-red-400 border border-red-600/30 hover:bg-red-600/30 rounded-lg text-xs font-semibold transition-all cursor-pointer shadow-sm"
+                    >
+                      <FileText className="w-3.5 h-3.5" />
+                      Exportar PDF
+                    </button>
+                  </>
                 ) : (
                   <>
+                    {activeTab === 'pagamentos' && (
+                      <button
+                        onClick={exportDadosPagamentosExcel}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-600/20 text-cyan-300 border border-cyan-500/40 hover:bg-cyan-600/30 rounded-lg text-xs font-bold transition-all cursor-pointer shadow-sm"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        Exportar Dados
+                      </button>
+                    )}
                     <button
                       onClick={exportToExcel}
                       className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600/20 text-emerald-400 border border-emerald-600/30 hover:bg-emerald-600/30 rounded-lg text-xs font-semibold transition-all cursor-pointer"
